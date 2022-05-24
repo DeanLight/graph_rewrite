@@ -72,7 +72,7 @@ User types:
 Rule types:
 * transforms where you dont change sub graph structure
 * Transforms where P/RHS are can be infered automatically
-* Constant transforms 
+* Constant transforms
 * matches with complex constraints
 * Recursive matches
 * Macros and templates
@@ -80,19 +80,30 @@ Rule types:
 * Multiple graph interactions
 * People who want imperative transforms
 
+## extras: !!!!!
+- rewrite(""" """)
+- naming edges is not supported, but necessary in changing one edge based on another. Currently, this is performed in 2 different rewritings.
 
 ## Design
+### general
+- blocks (% %) of our syntax, inside real python code. Imported function that links parameters (connect(LHS = ..., )).
+- definitions inside our block (LHS = ...) have the same lifespanas the variablesin the function that contains the block.
+- "P" is overriden by the <CHANGES ONLY> option. Connected 
 
-### constant transforms no attribute change
+### constant transforms no attribute change (only structure)
+- the override flag (transformer/visitor) are specified as part of the rewriting command, so a structure can be used as both LHS or RHS later.
+- '_' for anonymous node. 
+- no need to specify the parent to which the RHS is connected, unless the connection is not trivial (ambiguous).
 
-LHS = dot_file with anonymous nodes
-RHS = dot_file with anonymous nodes
-LHS_pattern ="""
-    a->b[x = Value ]->_
-"""
-RHS_pattern ="""
-    a->c
-"""
+%%
+L:
+  a -> b -> _
+
+R:
+  a -> c 
+%%
+
+rewrite(L, R, type=transformer) ### imported
 
 ### No structural change to graph
 
@@ -102,6 +113,15 @@ def newNode(..):-> dict
 LHS= """
     a->b[x=3]
 """
+
+%%
+  L:
+    a -> b -> c -> d -> e
+
+  R:
+    b -[]-> c #edge attribute
+    b[] -> c #vertice attribute
+%%
 transform1={
     "a"= newNode(dsadas),
     "b.x" = 5,
@@ -117,7 +137,7 @@ transform2={
     
 }
 
-### Big LFS small change
+### Big LHS small change
 
 LHS_pattern = """
     a[token: Node, label: Exp, val: Node]
