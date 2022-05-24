@@ -2,12 +2,12 @@
 ## Abilities
 
 Match types
-* Constant match rewrite
-* Recursive matches (tree or graph)
-* OR between match substructure 
-* Work on full graph as well
-* recursive matches on a MACRO pattern
-* Enable different traversal orders on the graph
+- [x] Constant match rewrite
+- [] Recursive matches (tree or graph)
+- [] OR between match substructure 
+- [] Work on full graph as well
+- [] recursive matches on a MACRO pattern
+- [] Enable different traversal orders on the graph
 
 Transform types
 * change attributes in nodes
@@ -70,12 +70,12 @@ User types:
 * Graph transformation gurus
 
 Rule types:
-* transforms where you dont change sub graph structure
-* Transforms where P/RHS are can be infered automatically
-* Constant transforms
-* matches with complex constraints
-* Recursive matches
-* Macros and templates
+- [x] transforms where you dont change sub graph structure
+- [] Transforms where P/RHS are can be infered automatically
+- [x] Constant transforms
+- [x] matches with complex constraints
+- [] Recursive matches
+- [x] Macros and templates
 * Recursive on complex structures
 * Multiple graph interactions
 * People who want imperative transforms
@@ -83,6 +83,8 @@ Rule types:
 ## extras: !!!!!
 - rewrite(""" """)
 - naming edges is not supported, but necessary in changing one edge based on another. Currently, this is performed in 2 different rewritings.
+- allow multiple edges between vertices - this requires handeling ambiguity, maybe by naming the edges.
+- Match pattern based on negation conditions (doesn't have children / not connected to vertex b...) - i.e. graph sorting
 
 ## Design
 ### general
@@ -96,46 +98,99 @@ Rule types:
 - no need to specify the parent to which the RHS is connected, unless the connection is not trivial (ambiguous).
 
 %%
-L:
-  a -> b -> _
+  L:
+    a -> b -> _
 
-R:
-  a -> c 
+  R:
+    a -> c 
 %%
 
 rewrite(L, R, type=transformer) ### imported
 
 ### No structural change to graph
-
-def newNode(..):-> dict
-    pass
-
-LHS= """
-    a->b[x=3]
-"""
-
 %%
   L:
+    <!-- Option A: include attributes in graph structure - syntactic suger -->
+    a -> b[value: str = "hello" , id: int] -> c -[weight]-> d -> e
+    <!-- Option B: seperate structure and attributes - simplified -->
     a -> b -> c -> d -> e
 
+    b = {
+      value: str = "hello"
+      id: int
+    }
+
+    b->c = {
+      weight
+    }
+
   R:
-    b -[]-> c #edge attribute
+    ~a <!--delete vertex (including attributes). if there are connections, RAISES AN ERROR-->
+    ~(b->c) <!--delete edge (including implicit attributes)-->
+    ~a.attribute <!--delete a node's attribute-->
+    ~(b->c).attribute <!--delete an edge's attribute-->
+    <!-- or: b\-[~ attribute]\->c -->
+
+    b -[]-> c  <!--edge attribute--
     b[] -> c #vertice attribute
 %%
-transform1={
+<!-- transform1={
     "a"= newNode(dsadas),
     "b.x" = 5,
     "a->b" ={
         edge_type = "hello",
         edge_weight = 3
     }
-}
+} } -->
 
-transform2={
-    "a"= newNode(dsadas),
-    "b" = register_and_insert()
-    
-}
+### Complex constraints
+- '|' stands for "such that", can be written in the syntactic sugar/simplified version of attributes, as follows.
+- complex conditions can be f or explicit, as long as it is boolean.
+%%
+    L:
+      <!-- Option A: include attributes in graph structure -->
+      a -> b[value: str | f(str) and g(str) , id: int] -> c -[weight | weight > 30]-> d -> e
+      <!-- Option B: seperate structure and attributes -->
+      a -> b -> c -> d -> e
+
+      b = {
+        value: str | f(str)
+        id: int
+      }
+
+      b->c = {
+        weight | weight > 30
+      }
+%%
+
+### Recursive matches
+- '->+' - duplications (one or more) similar to regex.
+
+%%
+  LHS:
+    _ -> b ->+ c -> _ <!-- one or more instances of the entire specified sub-graph -->
+    _ -> d
+
+    LIST(l = d) or (l->item)
+  
+  LIST:  <!-- recursive pattern definition-->
+    l -> item
+    l -> d
+
+    LIST(l = d)
+%%
+
+### Macros and templates
+- macros == regular patterns as used before, can be inforced on vertices.
+
+%%
+  PATTERN:
+    _ -> b -> c -> d
+
+    PATTERN1(a=d)
+  
+
+%%
 
 ### Big LHS small change
 
