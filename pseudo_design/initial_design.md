@@ -99,9 +99,8 @@ Rule types:
 - Library functions:
   ```python
   typedef dict[str, Node] as Match # where Node can represent both edge, vertex
-  typedef tupld[list[Match]] as ResultSet #[0] - vertices, [1] - edges
-  rewrite(target: graph/match, lhs: str, p: str = None, rhs: str = None, condition: ((Match, ...) -> bool) = None, type:  
-          str = "transformer") -> ResultSet
+  typedef tuple(list[Match],list[Match]) as ResultSet #[0] - vertices, [1] - edges
+  rewrite(target: graph/match, lhs: str, p: str = None, rhs: str = None, condition: ((Match, ...) -> bool) = None, apply=((Match, ...)-> void) = None  type: str = "transformer" ) -> ResultSet
   ```
 
 ### constant transforms no attribute change (only structure)
@@ -319,11 +318,22 @@ LHS = "a->b[value]; \
 results = rewrite(g, lhs=LHS)
 for match in results:
   RHS = f"a[value: {f(match["b"].value, match["c"].value)}]"
-  rewrite(rhs=RHS, flag=Transform)
+  rewrite(match, rhs=RHS, flag=Transform)
 
 
 def f(x,y):
   return x+y
+
+
+### example for 'apply'
+def f(match):
+  return match["b"].value + match["c"].value
+
+LHS = "a->b[value]; \
+    a->c[value]"
+RHS = f"""a[value ={x}]"""
+rewrite(g, rhs=RHS, lhs=LHS,apply=dict_of_rendering{...}, flag=Transform)
+
 ```
 ## tradeoff - parsing complex operations inside the LHS, or returning a representive python object that has the same attribute as the vertex, the object is returned in a dict (case 3). 
 
