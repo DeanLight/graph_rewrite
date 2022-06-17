@@ -100,7 +100,7 @@ Rule types:
   ```python
   typedef dict[str, Node] as Match # where Node can represent both edge, vertex
   typedef tupld[list[Match]] as ResultSet #[0] - vertices, [1] - edges
-  rewrite(lhs: str, p: str = None, rhs: str = None, condition: ((Match, ...) -> bool) = None, type:  
+  rewrite(target: graph/match, lhs: str, p: str = None, rhs: str = None, condition: ((Match, ...) -> bool) = None, type:  
           str = "transformer") -> ResultSet
   ```
 
@@ -127,7 +127,7 @@ L = "a -> b -> c -[weight: int]-> d -> e; \
        value: str = \"hello\", \
        id: int \
      }"
-
+P = "b -> b1; b -> b2"
 R = "a -> b[value: str = \"hello 2\"] -> c -[weight: int]-> d -> e; \
      c -> d; \
      b = { id: int }"
@@ -203,7 +203,12 @@ for match in results_set: #is there a defined order of graph iteration?
   sum += match["d<0>"].value
 
 #another example
-l = """  _ -> b -+-> d[value:int]
+l1 = """  _ -> b -+-> d[value:int]
+    d<0> -7-> e
+    e<0,5> -> _
+"""
+
+l2 = """  _ -> b -+-> d[value:int]
     d<0> -7-> e
     e<0,5> -> _
 """
@@ -310,9 +315,11 @@ rewrite(LHS, RHS, flag=Transform)
 ```python
 LHS = "a->b[value]; \
       a->c[value]"
-dict = match(LHS) # like in regex capture group
-RHS = f"a[value: {f(dict["b"].value, dict["c"].value)}]"
-rewrite(rhs=RHS, flag=Transform)
+#dict = match(LHS) # like in regex capture group
+results = rewrite(g, lhs=LHS)
+for match in results:
+  RHS = f"a[value: {f(match["b"].value, match["c"].value)}]"
+  rewrite(rhs=RHS, flag=Transform)
 
 
 def f(x,y):
