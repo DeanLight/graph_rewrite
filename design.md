@@ -1,23 +1,20 @@
-
 ## Design
 updated: 23.9.2022
-### general
+### General
 - ';' seperates different components of LHS/RHS
-
 - Library functions:
   ```python
-
-  typedef dict[str, Node] as Match # where Node can represent both edge, vertex
+  typedef dict[Hashable, dict] as Match # where Node can represent both edge, vertex
   typedef tuple(list[Match],list[Match]) as ResultSet #[0] - vertices, [1] - edges
   class TransTypes(Enum):
     TRANSFORMER = 1
     VISITOR = 2
 
-  def rewrite(lhs: list, p= None, rhs= None, condition= None, apply= None, 
-              type= TransTypes.TRANSFORMER) -> ResultSet:
+  def rewrite(lhs: list, p=None, rhs=None, condition=None, apply=None, 
+              type=TransTypes.TRANSFORMER) -> ResultSet:
     """
       lhs: a list of strings to allow the logical OR feature (details below).
-      p: string, in order to specify vertex sduplications.
+      p: string, in order to specify vertex duplications.
       rhs: a formatted string to allow future rendering (inside implementation) according to each    match's actual values.
       condition: function: Match -> bool, 
       apply: function: Match -> void
@@ -26,11 +23,10 @@ updated: 23.9.2022
     """
     pass
   ```
-
 - ResultSet is a tuple to allow edge-naming, and thus matching (details below).
 
 
-### constant transforms no attribute change (only structure)
+### Constant transforms no attribute change (only structure)
 - the override flag (transformer/visitor) are specified as part of the rewriting command, so a
   structure can be used as both LHS or RHS later.
 - '_' for anonymous node. 
@@ -40,7 +36,7 @@ updated: 23.9.2022
 ```python
 L = "a -> b -> _"
 R = "a -> c"
-rewrite(lhs=L, rhs=R, type="transformer")
+rewrite(lhs=L, rhs=R, type=TransTypes.TRANSFORMER)
 ```
 ### No structural change to graph
 - this can be easily implemented using type = "visitor"
@@ -60,7 +56,7 @@ R = "a -> b[value: str = \"hello 2\"] -> c -[weight: int]-> d -> e; \
      c -> d; \
      b = { id: int }"
 
-rewrite(lhs=L, rhs=R, type="transformer")
+rewrite(lhs=L, rhs=R, type=TransTypes.TRANSFORMER)
 ```
 
 ### Complex constraints
@@ -73,7 +69,7 @@ def f(x: str):
   ...
   return True # or some boolean
   
-rewrite(lhs=L, rhs=R ,condition=(match)->{return f(match["b"].value)}, type=transformer)
+rewrite(lhs=L, rhs=R ,condition=(match)->{return f(match["b"].value)}, type=TransTypes.TRANSFORMER)
 # de we still need Match()? discussed in side effects
 ```
 ### multiple generic connections 
@@ -91,7 +87,7 @@ l = """  _ -> b -+[weight:int]-> c -> d[value:int]
     d<0> -> e
     d<5> -> e
 """
-res = rewrite(lhs=l, rhs=None, type="visitor")
+res = rewrite(lhs=l, rhs=None, type=TransTypes.VISITOR)
 for match in results_set: #is there a defined order of graph iteration?
   sum += match["d<0>"].value
 
@@ -124,7 +120,7 @@ pattern1 = f"""{a}-+->e{num}[value: int = 6]"""
 l = f"""_ -> e -> c -> d;
     {pattern1.render(a='d',num=1)} ; {pattern1.render(a='c',num=2)}"""
 
-results_set = rewrite(lhs=l, rhs=None, type="visitor")
+results_set = rewrite(lhs=l, rhs=None, type=TransTypes.VISITOR)
 for match in results_set: #is there a defined order of graph iteration?
   sum += match["e2<3>"].value
 ```
@@ -149,7 +145,7 @@ rewrite(L,R,apply= f)
 def f(match): 
   return new ExpNode(BOOL_T)
 
-rewrite(lhs=L, rhs=R, type="visitor")
+rewrite(lhs=L, rhs=R, type=TransTypes.VISITOR)
 ```
 
 ### imperative side effect
@@ -166,22 +162,24 @@ def f(num: int):
   return num > 5
 
 L = "a->b[my_value: int]"
-result_set = rewrite(lhs=L, condition=(match)->{return f(match["b"].my_value)}, type=transformer)
+result_set = rewrite(lhs=L, condition=(match)->{return f(match["b"].my_value)}, type=TransTypes.TRANSFORMER)
 
 for match in results_set: #is there a defined order of graph iteration?
   sum += match["b"].my_value
 ```
 
 ### example for 'apply'
+```python
 def f(match):
   return match["b"].value + match["c"].value
 
 LHS = "a->b[value]; \
     a->c[value]"
 RHS = f"""a[value ={x}]"""
-rewrite(g, rhs=RHS, lhs=LHS,apply=dict_of_rendering{...}, flag=Transform)
+rewrite(g, rhs=RHS, lhs=LHS,apply=dict_of_rendering{...}, type=TransType.TRANSFORMER)
+```
 
-### choosing one of several LHS - 10%
+### choosing one of several LHS
 to allow the user to select one of several constraints, LHS is supplied as a list of formatted-strings. the matching algorithm finds graph components that match one or more of the constraints. (logical 'OR')
 
 ### naming edges - 10%
@@ -193,3 +191,7 @@ b->c = {
 }
 """
 ```
+### allowing collapse of structural recursion
+- Relevant mainly for parsing purposes. Convert a graph of sequence format to the fully evaluated version of it.
+- i.e., a list can be represented by the user as a tree with depth equal to the length of the list.
+  the tree can be converted to a 2-layered tree with the elements of the list as direct children of the root.
