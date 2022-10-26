@@ -1,29 +1,34 @@
 ## Design
-updated: 23.9.2022
+updated: 26.10.2022
 ### General
 - ';' seperates different components of LHS/RHS
 - Library functions:
   ```python
-  typedef dict[Hashable, dict] as Match # where Node can represent both edge, vertex
-  typedef tuple(list[Match],list[Match]) as ResultSet #[0] - vertices, [1] - edges
   class TransTypes(Enum):
     TRANSFORMER = 1
     VISITOR = 2
 
-  def rewrite(lhs: list, p=None, rhs=None, condition=None, apply=None, 
-              type=TransTypes.TRANSFORMER) -> ResultSet:
+    class Match:
+      def __init__(self, graph: DiGraph, nodes: Dict[str, List], edges: Dict[str, List], mapping: Dict[str, Hashable]):
+        pass
+    
+    class ResultSet:
+      def __init__(self, matches: List[Match]):
+          pass
+
+  def rewrite(lhs: Union[str, List[str]], p: str=None, rhs: Union[str, Template]=None, condition: Callable[Match, bool]=None, apply: Dict[str, Callable[Match, str]]=None, 
+              type: TransTypes=TransTypes.TRANSFORMER) -> ResultSet:
     """
-      lhs: a list of strings to allow the logical OR feature (details below).
+      lhs: a string / list of strings.
       p: string, in order to specify vertex duplications.
-      rhs: a formatted string to allow future rendering (inside implementation) according to each    match's actual values.
+      rhs: a string / a formatted string to allow future rendering (inside implementation) according to each match's actual values.
       condition: function: Match -> bool, 
-      apply: function: Match -> void
+      apply: dictionary from strings to (Match -> str) functions
       type: TransTypes object
       return value: result set
     """
     pass
   ```
-- ResultSet is a tuple to allow edge-naming, and thus matching (details below).
 
 
 ### Constant transforms no attribute change (only structure)
@@ -38,30 +43,29 @@ L = "a -> b -> _"
 R = "a -> c"
 rewrite(lhs=L, rhs=R, type=TransTypes.TRANSFORMER)
 ```
+
 ### No structural change to graph
-- this can be easily implemented using type = "visitor"
-- transformer - replaces the LHS with the RHS.
+- this can be easily implemented using type = TransTypes.VISITOR
+- TransTypes.TRANSFORMER - replaces the LHS with the RHS.
 ```python
 L = "a -> b -> c -[weight: int]-> d -> e; \
      c -> d; \
       \
-     b = { \
+     b [ \
        value: str = \"hello\", \
        id: int \
-     }"
+     ]"
 
 P = "b -> b1; b -> b2"
 
 R = "a -> b[value: str = \"hello 2\"] -> c -[weight: int]-> d -> e; \
      c -> d; \
-     b = { id: int }"
+     b [id: int]"
 
 rewrite(lhs=L, rhs=R, type=TransTypes.TRANSFORMER)
 ```
 
 ### Complex constraints
-- '|' stands for "such that", can be written in the syntactic sugar/simplified version of
-  attributes, as follows.
 - complex conditions can be a function or explicit, as long as it is boolean.
 
 ```python
@@ -69,35 +73,32 @@ def f(x: str):
   ...
   return True # or some boolean
   
-rewrite(lhs=L, rhs=R ,condition=(match)->{return f(match["b"].value)}, type=TransTypes.TRANSFORMER)
-# de we still need Match()? discussed in side effects
+L = "a -> b[attr: int] -> c"
+R = "a -> c"
+rewrite(lhs=L, rhs=R ,condition=lambda match: f(match["b"]["attr"]), type=TransTypes.TRANSFORMER)
 ```
-### multiple generic connections 
-- '-+->' - duplications (one or more) similar to regex. One or more instances of the entire specified sub-graph
+
+### Multiple generic connections 
+- allow duplications (one or more) similar to regex. One or more instances of the entire specified sub-graph
   only legal in the LHS (because the RHS should not be ambigous.)
 - in the resultSet, 'c' is now multiplied. the result set contains "d<0>"...
-- numbering of instances is inforced as part of the matching.
+- numbering of instances is enforced as part of the matching.
 - recursive duplications are allowed, d<0,1,5>...
-- inforcing an explicit number of connections is done by: -_num_->
+- enforcing an explicit number of connections is done by: -_num_->
+- enforcing an explicit minimal number of connections is done by: -_num_+->
 
 ```python
-#a-[*]->b in neo4j = all the connections from a to other b's
-
-l = """  _ -> b -+[weight:int]-> c -> d[value:int]
+l = """  _ -> b -7[weight:int]-> c -> d[value:int]
     d<0> -> e
     d<5> -> e
 """
 res = rewrite(lhs=l, rhs=None, type=TransTypes.VISITOR)
-for match in results_set: #is there a defined order of graph iteration?
-  sum += match["d<0>"].value
+sum = 0
+for match in results_set.matches: #is there a defined order of graph iteration?
+  sum += match["d<0>"]["value"]
 
 #another example
-l1 = """  _ -> b -+-> d[value:int]
-    d<0> -7-> e
-    e<0,5> -> _
-"""
-
-l2 = """  _ -> b -+-> d[value:int]
+l2 = """  _ -> b -5+-> d[value:int]
     d<0> -7-> e
     e<0,5> -> _
 """
@@ -105,51 +106,48 @@ l2 = """  _ -> b -+-> d[value:int]
 
 ### Macros and templates
 - macros == regular patterns as used before, can be enforced on vertices.
-
 - macros with anonymus entities:
 ```python
-pattern1 = f"""{a}-> __[value: int]""" #actually the constraint is inside condition...
+pattern1 = f"""{a}-> _[value: int]""" #actually the constraint is inside condition...
 L = f"""_ -> e -> c -> d;
-    {pattern1.render(a='d')} ; {pattern1.render(a='c')}"""
+    {pattern1.render(a='d')}; {pattern1.render(a='c')}"""
 ```
-
 - macros with named entities: only used for shortening of strings for the user.
 - in this case the result set will contain numbered strings(?)
 ```python
-pattern1 = f"""{a}-+->e{num}[value: int = 6]"""
+pattern1 = f"""{a}-5+->e{num}[value: int = 6]"""
 l = f"""_ -> e -> c -> d;
     {pattern1.render(a='d',num=1)} ; {pattern1.render(a='c',num=2)}"""
 
 results_set = rewrite(lhs=l, rhs=None, type=TransTypes.VISITOR)
-for match in results_set: #is there a defined order of graph iteration?
-  sum += match["e2<3>"].value
+sum = 0
+for match in results_set.matches: #is there a defined order of graph iteration?
+  sum += match["e2<3>"]["value"]
 ```
 - this is necessary to prevent bad translation such as:
 <!-- 
 L = _ -> e -> c -> d; 
     d -> e[...];
     c -> e[...] -->
-- macros can be inforced twice in the same vertex, with different numbering.
+- macros can be enforced twice in the same vertex, with different numbering.
 
-### visiting - intead of replacing the entire LHS
-- demonstration of using type = "visitor"
+### Visiting - intead of replacing the entire LHS
+- demonstration of using type = TransTypes.VISITOR
 ```python
-L = "a[token: Node, label: Exp, val: Node] \
-        ->b1[token: ExpNode, label: Exp, var: str, code: str] \
-        ->op[token: Node, label: AND] \
-        ->b2[token: ExpNode, label: Exp, var: str, code: str]"
-R = f'''a[token: ExpNode, label: Exp, val: ExpNode = {x}]'''
+L = "a[token: Node, label = \"EXP\", val: Node] \
+        ->b1[token: ExpNode, label = \"EXP\", var: str, code: str] \
+        ->op[token: Node, label = \"AND\"] \
+        ->b2[token: ExpNode, label = \"EXP\", var: str, code: str]"
+R = f'''a[token: ExpNode, label = \"EXP\", val: ExpNode = {x}]'''
 
-rewrite(L,R,apply= f)
-#not match-dependent but this usage of 'apply' is also ok to avoid heavy parsing.
 def f(match): 
-  return new ExpNode(BOOL_T)
+  return ExpNode(BOOL_T)
 
-rewrite(lhs=L, rhs=R, type=TransTypes.VISITOR)
+rewrite(L,rhs=R,apply={x=f})
 ```
 
 ### imperative side effect
-- result_set is a **read-only** list of dicts, representing the found matches **before** the changes caused by RHS (if any occured).
+- ResultSet is a view to the matches found, and allows accessing and changing matched attributes.
 - allows modifications of local parameters and retrieving direct values, which is not possible
   inside a function.
 - condition allows filtering matches.
@@ -162,33 +160,33 @@ def f(num: int):
   return num > 5
 
 L = "a->b[my_value: int]"
-result_set = rewrite(lhs=L, condition=(match)->{return f(match["b"].my_value)}, type=TransTypes.TRANSFORMER)
+result_set = rewrite(lhs=L, condition=lambda match: f(nodes_match["b"]["my_value"]), type=TransTypes.TRANSFORMER)
 
-for match in results_set: #is there a defined order of graph iteration?
-  sum += match["b"].my_value
+for match in results_set.matches: #is there a defined order of graph iteration?
+  sum += match["b"]["my_value"]
 ```
 
 ### example for 'apply'
 ```python
 def f(match):
-  return match["b"].value + match["c"].value
+  return str(match["b"]["value"] + match["c"]["value"])
 
 LHS = "a->b[value]; \
     a->c[value]"
 RHS = f"""a[value ={x}]"""
-rewrite(g, rhs=RHS, lhs=LHS,apply=dict_of_rendering{...}, type=TransType.TRANSFORMER)
+rewrite(g, rhs=RHS, lhs=LHS,apply={x: f}, type=TransType.TRANSFORMER)
 ```
 
-### choosing one of several LHS
+### choosing one of several LHS - 10%
 to allow the user to select one of several constraints, LHS is supplied as a list of formatted-strings. the matching algorithm finds graph components that match one or more of the constraints. (logical 'OR')
 
 ### naming edges - 10%
 - therefore the resultset is a tuple of lists (one for vertices and one for edges).
 ```python
 l = """ a->b->c 
-b->c = {
+b->c [
   $var_name = x
-}
+]
 """
 ```
 ### allowing collapse of structural recursion
