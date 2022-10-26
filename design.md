@@ -16,14 +16,14 @@ updated: 26.10.2022
       def __init__(self, matches: List[Match]):
           pass
 
-  def rewrite(lhs: Union[str, List[str]], p: str=None, rhs: Union[str, Template]=None, condition: Callable[Match, bool]=None, apply: Dict[str, Callable[Match, str]]=None, 
+  def rewrite(lhs: Union[str, List[str]], p: str=None, rhs: Union[str, Template]=None, condition: Callable[Match, bool]=None, render_rhs: Dict[str, Callable[Match, str]]=None, 
               type: TransTypes=TransTypes.TRANSFORMER) -> ResultSet:
     """
       lhs: a string / list of strings.
       p: string, in order to specify vertex duplications.
       rhs: a string / a formatted string to allow future rendering (inside implementation) according to each match's actual values.
       condition: function: Match -> bool, 
-      apply: dictionary from strings to (Match -> str) functions
+      render_rhs: dictionary from strings to (Match -> str) functions
       type: TransTypes object
       return value: result set
     """
@@ -143,7 +143,7 @@ R = f'''a[token: ExpNode, label = \"EXP\", val: ExpNode = {x}]'''
 def f(match): 
   return ExpNode(BOOL_T)
 
-rewrite(L,rhs=R,apply={x=f})
+rewrite(L,rhs=R,render_rhs={x=f})
 ```
 
 ### imperative side effect
@@ -160,13 +160,13 @@ def f(num: int):
   return num > 5
 
 L = "a->b[my_value: int]"
-result_set = rewrite(lhs=L, condition=lambda match: f(nodes_match["b"]["my_value"]), type=TransTypes.TRANSFORMER)
+result_set = rewrite(lhs=L, condition=lambda match: f(match["b"]["my_value"]), type=TransTypes.TRANSFORMER)
 
 for match in results_set.matches: #is there a defined order of graph iteration?
   sum += match["b"]["my_value"]
 ```
 
-### example for 'apply'
+### example for 'render_rhs'
 ```python
 def f(match):
   return str(match["b"]["value"] + match["c"]["value"])
@@ -174,7 +174,7 @@ def f(match):
 LHS = "a->b[value]; \
     a->c[value]"
 RHS = f"""a[value ={x}]"""
-rewrite(g, rhs=RHS, lhs=LHS,apply={x: f}, type=TransType.TRANSFORMER)
+rewrite(g, rhs=RHS, lhs=LHS,render_rhs={x: f}, type=TransType.TRANSFORMER)
 ```
 
 ### choosing one of several LHS - 10%
