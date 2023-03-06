@@ -37,6 +37,7 @@ RUN pip3 install fastcore
 RUN pip3 install ghapi
 RUN pip3 install execnb
 RUN pip3 install nbdev
+RUN pip3 install ipykernel
 
 ### Install Python packages listed in 'requirements.txt' using pip.
 COPY . graph_rewrite

@@ -6,4 +6,5 @@ d = { 'settings': { 'branch': 'master',
                 'git_url': 'https://github.com/DeanLight/graph_rewrite/',
                 'lib_path': 'graph_rewrite'},
   'syms': { 'graph_rewrite.core': {'graph_rewrite.core.foo': ('core.html#foo', 'graph_rewrite/core.py')},
-            'graph_rewrite.stub': {'graph_rewrite.stub.bar': ('stub.html#bar', 'graph_rewrite/stub.py')}}}
+            'graph_rewrite.matcher': { 'graph_rewrite.matcher.find_struct_matches': ( 'matcher.html#find_struct_matches',
+                                                                                      'graph_rewrite/matcher.py')}}}
