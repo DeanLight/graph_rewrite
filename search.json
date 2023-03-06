@@ -1,0 +1,128 @@
+[
+  {
+    "objectID": "render_rhs.html",
+    "href": "render_rhs.html",
+    "title": "Render RHS",
+    "section": "",
+    "text": "from typing import *\n\nfrom jinja2 import *\n\nNote: you may need to restart the kernel to use updated packages.\n\n\n'c:\\Program' is not recognized as an internal or external command,\noperable program or batch file.\n\n\n\nRenderFunc = Callable[Match, str]\n\n\nRender RHS strings\nReceives a filtered ResultSet, a RHS stringand a dictionary from strings to RenderFuncs. Returns a list of RHS rendered strings, whose indices are corresponding to those of the ResultSet.\n\ndef render_rhs(result_set: ResultSet, rhs: Union[str, Template], render_func: Dict[str, RenderFunc]) -> List[str]:\n    # if type(rhs) != Template:\n    #   return [rhs] * length of result_set.matches, as rhs is already rendered\n\n    # initialize rendered_rhs, an empty list\n    # for match in result_set.matches:\n    #   cur_calc_args = {attr: render_func[attr](match) for attr in render_func.keys}\n    #   cur_rendered = rhs.render(cur_calculated_args)\n    #   append cur_rendered to rendered_rhs\n\n    # return rendered_rhs\n    pass"
+  },
+  {
+    "objectID": "matcher.html",
+    "href": "matcher.html",
+    "title": "Matcher",
+    "section": "",
+    "text": "from networkx import DiGraph\nfrom networkx.algorithms import isomorphism # check subgraph's isom.\nimport itertools # iterating over all nodes\\edges combinations\nfrom typing import *"
+  },
+  {
+    "objectID": "matcher.html#checking-attributes",
+    "href": "matcher.html#checking-attributes",
+    "title": "Matcher",
+    "section": "Checking Attributes",
+    "text": "Checking Attributes\nGiven the set of key-value attributes for a pattern node/edge and an actual node/edge, the following function checks whether the actual object contains all attributes whose existence is encforced by the pattern object. It is later used in order to find matches.\n\ndef attributes_exist(actual_attr: dict, pattern_attr: dict) -> bool:\n    # for attr_name in pattern_attr:\n    #   if actual_attr doesn't contain an attribute named attr_name:\n    #       return False, as actual object doesn't match the pattern\n    # if all attributes were found, return True\n    pass"
+  },
+  {
+    "objectID": "matcher.html#find-matches",
+    "href": "matcher.html#find-matches",
+    "title": "Matcher",
+    "section": "Find Matches",
+    "text": "Find Matches\nGiven an input graph and a list of pattern graphs, return a list of tuples, each consists of a mapping from pattern nodes to actual nodes which matches one of the given patterns, along with the related pattern.\n\ndef find_matches(input: DiGraph, patterns_list: List[DiGraph]) -> List[Tuple[Dict[str, Hashable], DiGraph]]:\n    # initialize true_matches, an empty list\n\n    # for pattern in patterns_list:    \n        # 1) Narrow down the search space by removing irrelavant nodes\n        # initialize matching_nodes, an empty set\n        # for each pair of actual_node, pattern_node:\n        #   if attribute_exist(actual_node attributes, pattern_node attributes):\n        #       add actual_node to matching_nodes\n        # reduced_input = subgraph of input, consisting of matching_nodes an all edges connected to them\n\n        # 2) Find isomorphic matches (match pattern's structure ONLY)\n        # initialize isom_matches, an empty list\n        # for each possible set of nodes in reduced_input, of same size as number of nodes in pattern:\n        #      nodes_subg = subgraph of reduced_input, consisting only of the current set of nodes and connected edges\n        #      for each possible set of edges in nodes_subg, of same size as number of edges in pattern:\n        #           subg = a DiGraph consisting of current sets of nodes and edges\n        #           use isomorphism.DiGraphMatcher in order to find all isomorphisms from pattern to subg\n        #           for each isomorphism, add the mapping it defines along with the current nodes_subg to isom_matches\n\n        # 3) Find true matches among isomorphisms (match pattern's attributes)\n        # for every mapping, subgraph in isom_matches:\n        #   for every pattern_node, corresponding original_node in mapping:\n        #       if not attributes_exist(original_node attr in subgraph, pattern_node attr in pattern):\n        #           continue to next isom_match, as the current one doesn't match the pattern\n        #   for every pattern_edge, corresponding original_edge induced from the nodes in mapping:\n        #       if not attributes_exist(original_edge attr in subgraph, pattern_node attr in pattern):\n        #           continue to next isom_match for the same reason as above\n        #   if reached here, then we found a true match\n        #   add (mapping, pattern) to true_matches, and continue to next isom_match\n\n    # return true_matches\n    pass"
+  },
+  {
+    "objectID": "result_set.html",
+    "href": "result_set.html",
+    "title": "Result Set",
+    "section": "",
+    "text": "import networkx as nx\nfrom networkx import DiGraph\nfrom typing import *"
+  },
+  {
+    "objectID": "result_set.html#type-definitions",
+    "href": "result_set.html#type-definitions",
+    "title": "Result Set",
+    "section": "Type Definitions",
+    "text": "Type Definitions\n\nMatch\nA Match is a subview of the original graph, limited to the nodes, edges and attributes specified in the pattern. It includes the original graph, dictionaries which map nodesto their related attributes in the pattern, and the mapping from pattern nodes to real ones.\n\nclass Match:\n    def __init__(self, graph: DiGraph, nodes: Dict[str, List], edges: Dict[str, List], mapping: Dict[str, Hashable]):\n        # self.graph = graph\n        # self.nodes = nodes\n        # self.edges = edges\n        # self.mapping = mapping\n        pass\n\n    class DoesNotExist(Exception):\n        pass\n\n    def __get_node(self, pattern_node):\n        # return self.graph.nodes[self.mapping[pattern_node]]\n        pass\n\n    def __get_edge(self, pattern_src, pattern_dst):\n        # return self.graph.edges[self.mapping[pattern_src], self.mapping[pattern_dst]]\n        pass\n\n    def get_nodes(self):\n        # return {pattern_node: self.__get_node(pattern_node) for pattern_node in self.nodes}\n        pass\n\n    def get_edges(self):\n        # return {convert_to_edge_name(pattern_src, pattern_dest): self.__get_edge(pattern_src, pattern_dest) for (pattern_src, pattern_dest) in self.edges}\n        pass\n\n    def __getitem__(self, key: Hashable):\n        # try:\n        #     if str(key).__contains__(\"->\") and len(str(key).split) == 2:\n        #         end_nodes = str(key).split(\"->\")\n        #         return self.__get_edge(end_nodes[0], end_nodes[1])\n        #     else:\n        #         return self.__get_node(key)\n        # except:\n        #     raise self.DoesNotExist\n        pass\n\n\n\nResultSet\nA ResultSet contains all matches.\n\nclass ResultSet:\n    def __init__(self, matches: List[Match]):\n        # self.matches = matches\n        pass\n\n    def __getitem__(self, index: int):\n        # return self.matches[index]\n        pass"
+  },
+  {
+    "objectID": "result_set.html#convert-list-of-mappings-to-a-resultset",
+    "href": "result_set.html#convert-list-of-mappings-to-a-resultset",
+    "title": "Result Set",
+    "section": "Convert list of mappings to a ResultSet",
+    "text": "Convert list of mappings to a ResultSet\n\ndef mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[str, Hashable]) -> Match:\n    # initialize nodes_list and edges_list, empty dictionaries\n    # initialize cleared_mapping as a copy of mapping\n\n    # for pattern_node in mapping.keys:\n    #   if pattern_node is anonymous (has a special name defined in Parser):\n    #       remove key pattern_node from cleared_mapping\n    #       continue, as we don't want to include it in the Match\n    #   wanted_attr = list of names of attributes referenced for pattern_node in pattern\n    #   nodes_list[pattern_node] = wanted_attr\n\n    # for pattern edge (n1, n2) in pattern.edges:\n    #   if n1 or n2 is anonymous:\n    #       continue, as before\n    #   wanted_attr = list of names of attributes references for pattern edge (n1, n2) in pattern\n    #   edges_list[convert_to_edge_name(n1, n2)] = cur_attr_dict\n\n    # return Match(input, nodes_list, edges_list, cleared_mapping)\n    pass\n\n\ndef mappings_to_results_set(input: DiGraph, mappings: List[Tuple[Dict[str, Hashable], DiGraph]]) -> ResultSet:\n    # initialize matches, an empty list\n\n    # for (mapping, pattern) in mappings:\n    #   match = mapping_to_match(input, pattern, mapping)\n    #   append match to matches\n\n    # return ResultSet(matches)S\n    pass"
+  },
+  {
+    "objectID": "condition_filter.html",
+    "href": "condition_filter.html",
+    "title": "Condition Filter",
+    "section": "",
+    "text": "from typing import *\n\n\nConditionFunc = Callable[Match, bool]\n\nNameError: name 'Match' is not defined\n\n\n\nFilter Matches based on a Condition function\nReceives a ResultSet object and a Condition function, and returns a filtered ResultSet.\n\ndef filter_matches(unfiltered_results: ResultSet, condition: ConditionFunc) -> ResultSet:\n    # initialize new_matches, empty list\n\n    # for match in unfiltered_results.matches:\n    #   if condition(match):\n    #       add match to new_matches\n\n    # return ResultSet(new_matches)\n    pass"
+  },
+  {
+    "objectID": "core.html",
+    "href": "core.html",
+    "title": "core",
+    "section": "",
+    "text": "source\n\nfoo\n\n foo ()"
+  },
+  {
+    "objectID": "stub.html",
+    "href": "stub.html",
+    "title": "core",
+    "section": "",
+    "text": "assert foo() == None\n\nho\n\n\nAssertionError: \n\n\n\nsource\n\nbar\n\n bar ()"
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "{{repo}}",
+    "section": "",
+    "text": "This file will become your README and also the index of your documentation."
+  },
+  {
+    "objectID": "index.html#install",
+    "href": "index.html#install",
+    "title": "{{repo}}",
+    "section": "Install",
+    "text": "Install\npip install {{lib_path}}"
+  },
+  {
+    "objectID": "index.html#how-to-use",
+    "href": "index.html#how-to-use",
+    "title": "{{repo}}",
+    "section": "How to use",
+    "text": "How to use\nFill me in please! Don’t forget code examples:\n\n1+1\n\n2"
+  },
+  {
+    "objectID": "01_lhs_parsing.html",
+    "href": "01_lhs_parsing.html",
+    "title": "graph_rewrite",
+    "section": "",
+    "text": "from lark import Lark"
+  },
+  {
+    "objectID": "01_lhs_parsing.html#lhs-parser",
+    "href": "01_lhs_parsing.html#lhs-parser",
+    "title": "graph_rewrite",
+    "section": "LHS parser",
+    "text": "LHS parser\nparsing of the pattern sent as lhs, into a networkX graph representing the template to search.\nThe module converts the declerative constraints regarding the properties of the nodes and edges in the LHS, to imperative functions that are checked together with the ‘condition’ parameter"
+  },
+  {
+    "objectID": "01_lhs_parsing.html#grammar",
+    "href": "01_lhs_parsing.html#grammar",
+    "title": "graph_rewrite",
+    "section": "grammar",
+    "text": "grammar\n\nlhs_parser = Lark(r\"\"\"\n    patterns: pattern (\";\" pattern)*\n            \n    pattern: [vertex (connection vertex)*]\n\n    vertex: named_vertex attributes\n          | index_vertex attributes\n          | ANONYMUS attributes\n\n    named_vertex: [a-zA-Z0-9]* #any string with numbers and letters only\n    index_vertex: named_vertex \"<\" NATURAL_NUMBER (\",\" NATURAL_NUMBER)* \">\"\n    ANONYMUS: \"_\"\n\n    connection: \"-\" [attributes \"-\"] \">\"\n              | multi_connection\n\n    attributes: \"\\[\" attribute (, #allow optional \\n here, for imperative syntax)\n                              attribute)* \"\\]\"\n\n    multi_connection: \"-\" NATURAL_NUMBER \"+\" [attributes \"-\"] \"->\" # explicit minimal constraint\n                    | \"-\" NATURAL_NUMBER [attributes \"-\"] \"->\" # deterministic number of connections\n\n    attribute: attr_name [\":\" type] [\"=\" value] \n\n    attr_name: #lark-imported\n    type: #lark-imported #escaped string or word\n    value: #imported?\n\n    NATURAL_NUMBER: #imported?\n\n\n\n\n    \"\"\", start='patterns')"
+  },
+  {
+    "objectID": "01_lhs_parsing.html#transformer",
+    "href": "01_lhs_parsing.html#transformer",
+    "title": "graph_rewrite",
+    "section": "Transformer",
+    "text": "Transformer\nThe transformer is designed to return the networkX graph representing the patterns.\nFor each branch, the appropriate method will be called with the children of the branch as its argument, and its return value will replace the branch in the tree.\n\nfrom lark import Transformer\nclass lhsTransformer(Transformer):\n    def attribute(self, attr_name, type, value):\n        # return attr_name, constraints are handled in other transformer.\n        pass\n\n    def multi_connection(self, number, attributes): # +\n        # return the list of attributes(strings), number of duplications,\n        #   and FALSE (indicating that the connection is not deterministic)\n\n        # renewed: return the list of attributes(strings), add a special attribute to denote number of duplications,\n        #   and FALSE (indicating that the connection is not deterministic)\n        pass\n    def multi_connection(self, number, attributes ): # no +\n        # return the list of attributes(strings), number of duplications,\n        #  and TRUE (indicating that the connection is deterministic)\n\n        # renewed: return the list of attributes(strings), add a special attribute to denote number of duplications,\n        #   and TRUE (indicating that the connection is not deterministic)\n        pass\n\n    def attributes(self, *attributes):\n        # return a packed list of the attribute names.\n        pass\n\n    def connection(self, attributes_list, num_duplications, is_deterministic): #multiconnection\n        # return the packed list of attributes received, num_duplications, is_deterministic\n        pass\n\n    def connection(self, attributes): #\n        # return the packed list of attributes received, num_duplications = 1, is_deterministic = True\n        pass\n\n    def ANONYMUS(self): #\n        # return a dedicated name for anonymus (string), and an empty list.\n        pass\n\n    def sub_vertex(self, main_name, *numbers):\n        # return the main name of the vertex, and a list of the indices specified.\n        pass\n    \n    def named_vertex(self, __):\n        # return the main name of the vertex, and an empty list.\n        pass\n\n    def vertex(self, name, indices_list, attributes_list):\n        # return arguments\n        pass\n\n    def pattern(self, vertex, *connections_to_vertex):\n        # 1) unpack lists of vertices and connections.\n        # 2) create a networkX graph:\n            # if there is a special attribute with TRUE, dumplicate the connection __number__ times.\n\n        pass\n\n    def patterns(self,):\n\n        pass"
+  },
+  {
+    "objectID": "01_lhs_parsing.html#type-and-constant-value-checking",
+    "href": "01_lhs_parsing.html#type-and-constant-value-checking",
+    "title": "graph_rewrite",
+    "section": "Type and constant value checking",
+    "text": "Type and constant value checking\nThe transformer is designed to collect the node type and constant node value constraints, such that they are added to the ‘condition’ parameter to be checked later.\nThis transformer works on a copy of the tree to keep it intact.\n\nclass collectTypeConstraints(Transformer):\n    def attribute(self, attr_name, type, value):\n        # return a mapping from attr_name - > required type and value\n        pass\n\n    def attributes(self, *attributes):\n        # return a packed list of the attribute mappings.\n        pass\n\n    def vertex(self, name, indices_list, attributes_list):\n        # same as lhsTransformer\n        pass\n\n    def pattern(self, vertex, *connections_to_vertex):\n        # return arguments\n        pass\n\n    def patterns(self, *patterns):\n        # unpack lists of vertices and connections.\n        def typeCondition(Match):\n            # for every vertex in vertex list:\n                # create full_vertex_name by the attached indices list\n                # for every attr, type, name required for the vertex:\n                    # constructor = getName(type) - get the constructor for the type\n                    # 1) check that the required type and value match together.\n                    # try:\n                    #     instance = constructor(value)\n                    # Except:\n                        # flag = False: value does not match the type.\n\n                    # 2) check that the value constraint holds\n                    # if getattr(instance, __eq__) == None:\n                        # flag = False. the type must implement __eq__\n                    # if not (instance == match[full_vertex_name][attr])\n\n                    # no need to check the type constraint(?), if the value fits. (python)\n\n            # TODO: perform the same iterations in the connections list.\n\n            #return flag and condition(Match)\n            pass\n\n        return typeCondition #sent as a module output and replaces condition.\n        pass\n\nApply the Transformers\n\nrequired_syntax =  \"\"\"\na -> b\n\na -[x:int = ...]-> b\n\na -> b[x:int = ...]\n\na -> b -6+[weight:int]-> c -> d[value:int]\nd<0> -> e\nd<5> -> e\n\nb -+-> d[value:int]\nd<0> -7-> e\ne<0,5> -> _\n\nb[ \\\nvalue: str = \\\"hello\\\", \\\nid: int \\\n]\n\nb -[\n...\n]-> c \n\n\"\"\""
+  }
+]
