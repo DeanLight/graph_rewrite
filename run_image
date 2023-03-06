@@ -1,0 +1,2 @@
+## In cmd, replace ${PWD} with %cd%
+docker run -it -v ${PWD}:/home/jovyan/graph_rewrite graph_rewrite

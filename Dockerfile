@@ -1,6 +1,5 @@
-# ARG UBUNTU_VER=18.04
-# FROM ubuntu:${UBUNTU_VER}
-FROM ubuntu:latest
+ARG UBUNTU_VER=22.04
+FROM ubuntu:${UBUNTU_VER}
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install basic system utilities.
@@ -14,7 +13,8 @@ RUN apt-get update -y && apt-get install -y \
       gawk \
       curl \
       wget \
-      jq
+      jq \
+      python3-pip
 
 
 ### python
@@ -33,10 +33,10 @@ ENV PATH=/miniconda/bin:${PATH}
 RUN conda update -y conda
 
 # Install nbdev requirements
-RUN pip install -U git+https://github.com/fastai/fastcore.git
-RUN pip install -U git+https://github.com/fastai/ghapi.git
-RUN pip install -U git+https://github.com/fastai/execnb.git
-RUN pip install -U git+https://github.com/fastai/nbdev.git
+RUN pip3 install fastcore
+RUN pip3 install ghapi
+RUN pip3 install execnb
+RUN pip3 install nbdev
 
 ### Install Python packages listed in 'requirements.txt' using pip.
 COPY . graph_rewrite
