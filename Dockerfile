@@ -32,12 +32,6 @@ RUN rm Miniconda3-${CONDA_VER}-Linux-${OS_TYPE}.sh
 ENV PATH=/miniconda/bin:${PATH}
 RUN conda update -y conda
 
-# Install nbdev requirements
-RUN pip3 install fastcore
-RUN pip3 install ghapi
-RUN pip3 install execnb
-RUN pip3 install nbdev
-
 ### Install Python packages listed in 'requirements.txt' using pip.
 COPY . graph_rewrite
 RUN pip install -e graph_rewrite
