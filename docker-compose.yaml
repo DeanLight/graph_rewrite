@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  main:
+    image: graph-rewrite:0.0.1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/home/jovyan/graph_rewrite
+    stdin_open: true 
+    tty: true
