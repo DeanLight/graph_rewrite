@@ -1,0 +1,11 @@
+repos:
+- repo: https://github.com/fastai/nbdev
+  rev: 2.2.10
+  hooks:
+  - id: nbdev_clean
+  - id: nbdev_export
+  
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v2.5.0
+  hooks:
+    - id: check-added-large-files

@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "graph_rewrite"
+  site-url: "https://DeanLight.github.io/graph_rewrite"
+  description: ""a declerative graph rewriting framework""
+  repo-branch: main
+  repo-url: "https://github.com/DeanLight/graph_rewrite"

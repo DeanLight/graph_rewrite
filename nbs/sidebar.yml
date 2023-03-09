@@ -1,0 +1,11 @@
+website:
+  sidebar:
+    contents:
+      - index.ipynb
+      - 00_core.ipynb
+      - 01_lhs_parsing.ipynb
+      - 01_stub.ipynb
+      - 02_matcher.ipynb
+      - 03_result_set.ipynb
+      - 04_condition_filter.ipynb
+      - 05_render_rhs.ipynb
