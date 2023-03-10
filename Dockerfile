@@ -13,9 +13,7 @@ RUN apt-get update -y && apt-get install -y \
       gawk \
       curl \
       wget \
-      jq \
-      python3-pip
-
+      jq 
 
 # ### python
 
@@ -44,13 +42,12 @@ ENV PATH="$PATH:/opt/conda/bin"
 
 
 # ### Install Python packages listed in 'requirements.txt' using pip.
-# COPY . graph_rewrite
-# RUN pip install -e graph_rewrite
+
 
 # USER jovyan
 WORKDIR /home/jovyan
 
-#RUN python /spanner_workbench/src/rgxlog-interpreter/src/rgxlog/stdlib/nlp.py
-#RUN python /spanner_workbench/src/rgxlog-interpreter/src/rgxlog/stdlib/rust_spanner_regex.py
+COPY . graph_rewrite
+RUN pip install -e graph_rewrite
 
 CMD ["/bin/bash"]
