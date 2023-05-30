@@ -3,13 +3,13 @@
 # %% auto 0
 __all__ = ['find_matches']
 
-# %% ../nbs/02_matcher.ipynb 5
+# %% ../nbs/02_matcher.ipynb 4
 from networkx import DiGraph
 from networkx.algorithms import isomorphism # check subgraph's isom.
 import itertools # iterating over all nodes\edges combinations
 from typing import *
 
-# %% ../nbs/02_matcher.ipynb 7
+# %% ../nbs/02_matcher.ipynb 6
 def find_matches(input: DiGraph, pattern: DiGraph) -> List[Dict[str, Hashable]]:
     """
     Finds matches of a pattern graph inside an input graph, and returns mappings for each match.
@@ -26,24 +26,28 @@ def find_matches(input: DiGraph, pattern: DiGraph) -> List[Dict[str, Hashable]]:
     A list of str->hashable dictionaries:
         List of mappings from pattern nodes names to actual nodes names.
     """
-    def attributes_exist(original: dict, pattern: dict):
+    def attributes_exist(input: dict, pattern: dict) -> bool:
+        """
+        Returns True if all the attributes keys in the pattern dictionary appear in the input dictionary,
+        False otherwise.
+        """
         for attr_name, _ in pattern.items():
-            if attr_name not in original:
+            if attr_name not in input:
                 return False
         return True
 
     # Narrow down search space by removing irrelavant nodes
-    matching_nodes = set()
+    matching_nodes: set[str] = set() # names of nodes in input which might match to some pattern node
     for (_, pattern_attr) in pattern.nodes(data=True):
         for (graph_node, graph_attr) in input.nodes(data=True):
             if attributes_exist(graph_attr, pattern_attr):
-                matching_nodes.add(graph_node)
-    reduced_input: DiGraph = input.subgraph(matching_nodes)
+                matching_nodes.add(graph_node) # graph_node might be a match to a pattern node
+    reduced_input: DiGraph = input.subgraph(matching_nodes) # a graph only with the matching nodes + connected edges
 
-    isom_matches = []
-    for sub_nodes in itertools.combinations(reduced_input.nodes, len(pattern.nodes)):
+    isom_matches: List[Tuple[DiGraph, dict]] = []
+    for sub_nodes in itertools.combinations(reduced_input.nodes, len(pattern.nodes)): # any subset of matching nodes of pattern length
         nodes_subg: DiGraph = reduced_input.subgraph(sub_nodes) # only the selected nodes and connected edges
-        for sub_edges in itertools.combinations(nodes_subg.edges(data=True), len(pattern.edges)): # subset of the connected edges
+        for sub_edges in itertools.combinations(nodes_subg.edges(data=True), len(pattern.edges)): # any subset of the connected edges
             # Create a subgraph with selected edges and nodes
             subg = DiGraph()
             subg.add_nodes_from(list(nodes_subg.nodes(data=True)))
@@ -55,13 +59,13 @@ def find_matches(input: DiGraph, pattern: DiGraph) -> List[Dict[str, Hashable]]:
                 isom_matches.append((nodes_subg, isom_mapping))
 
     # Find true matches among isoms (matche pattern's attributes)
-    true_matches = []
+    true_matches: List[dict[str, str]] = []
     for (subgraph, mapping) in isom_matches:
         is_match = True
         # check nodes match
         for (pattern_node, original_node) in mapping.items():
             if not attributes_exist(subgraph.nodes[original_node], pattern.nodes[pattern_node]):
-                is_match = False
+                is_match = False # input node does not match the pattern node
                 break
         if not is_match:
             continue
