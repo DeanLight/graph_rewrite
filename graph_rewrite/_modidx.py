@@ -5,12 +5,4 @@ d = { 'settings': { 'branch': 'main',
                 'doc_host': 'https://DeanLight.github.io',
                 'git_url': 'https://github.com/DeanLight/graph_rewrite',
                 'lib_path': 'graph_rewrite'},
-  'syms': { 'graph_rewrite.core': {'graph_rewrite.core.foo': ('core.html#foo', 'graph_rewrite/core.py')},
-            'graph_rewrite.matcher': { 'graph_rewrite.matcher.attributes_exist': ( 'matcher.html#attributes_exist',
-                                                                                   'graph_rewrite/matcher.py'),
-                                       'graph_rewrite.matcher.find_matches': ('matcher.html#find_matches', 'graph_rewrite/matcher.py')},
-            'graph_rewrite.render_rhs': { 'graph_rewrite.render_rhs.render_rhs': ( 'render_rhs.html#render_rhs',
-                                                                                   'graph_rewrite/render_rhs.py')},
-            'graph_rewrite.result_set': { 'graph_rewrite.result_set.filter_matches': ( 'condition_filter.html#filter_matches',
-                                                                                       'graph_rewrite/result_set.py')},
-            'graph_rewrite.stub': {'graph_rewrite.stub.bar': ('stub.html#bar', 'graph_rewrite/stub.py')}}}
+  'syms': {'graph_rewrite.core': {'graph_rewrite.core.foo': ('core.html#foo', 'graph_rewrite/core.py')}}}
