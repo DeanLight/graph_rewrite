@@ -3,20 +3,20 @@
 # %% auto 0
 __all__ = ['convert_to_edge_name', 'is_anonymous_node', 'Match', 'ResultSet', 'mapping_to_match', 'mappings_to_results_set']
 
-# %% ../nbs/03_result_set.ipynb 5
+# %% ../nbs/03_result_set.ipynb 4
 import networkx as nx
 from networkx import DiGraph
 from typing import *
 
-# %% ../nbs/03_result_set.ipynb 7
+# %% ../nbs/03_result_set.ipynb 6
 def convert_to_edge_name(src: Hashable, dest: Hashable) -> str:
     return f"{src}->{dest}"
 
-# %% ../nbs/03_result_set.ipynb 9
+# %% ../nbs/03_result_set.ipynb 8
 def is_anonymous_node(node_name: Hashable) -> bool:
     return len(node_name) >= 1 and node_name[0] == '$'
 
-# %% ../nbs/03_result_set.ipynb 12
+# %% ../nbs/03_result_set.ipynb 11
 class Match:
     def __init__(self, graph: DiGraph, nodes: List[Hashable], edges: List[Tuple[Hashable, Hashable]], mapping: Dict[str, Hashable]):
         self.graph: DiGraph = graph
@@ -51,15 +51,18 @@ class Match:
         except:
             raise self.DoesNotExist
 
-# %% ../nbs/03_result_set.ipynb 14
+# %% ../nbs/03_result_set.ipynb 13
 class ResultSet:
     def __init__(self, matches: List[Match]):
-        self.matches: List[Match] = matches
+        self.__matches: List[Match] = matches
 
     def __getitem__(self, index: int):
-        return self.matches[index]
+        return self.__matches[index]
+    
+    def __len__(self):
+        return len(self.__matches)
 
-# %% ../nbs/03_result_set.ipynb 16
+# %% ../nbs/03_result_set.ipynb 15
 def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[str, Hashable]) -> Match:
     nodes_list, edges_list = [], []
     cleared_mapping = mapping.copy()
@@ -77,7 +80,7 @@ def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[str, Hashab
 
     return Match(input, nodes_list, edges_list, cleared_mapping)
 
-# %% ../nbs/03_result_set.ipynb 17
+# %% ../nbs/03_result_set.ipynb 16
 def mappings_to_results_set(input: DiGraph, pattern: DiGraph, mappings: List[Dict[str, Hashable]]) -> ResultSet:
     matches = []
 
