@@ -26,7 +26,6 @@ def find_matches(input: DiGraph, pattern: DiGraph) -> List[Dict[str, Hashable]]:
     A list of str->hashable dictionaries:
         List of mappings from pattern nodes names to actual nodes names.
     """
-    
     def attributes_exist(input: dict, pattern: dict) -> bool:
         """
         Returns True if all the attributes keys in the pattern dictionary appear in the input dictionary,
