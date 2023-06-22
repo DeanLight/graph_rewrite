@@ -5,7 +5,7 @@ __all__ = ['Rule', 'rewrite_match']
 
 # %% ../nbs/08_transform.ipynb 4
 from networkx import DiGraph
-from .result_set import *
+from .match_class import *
 from typing import *
 
 # %% ../nbs/08_transform.ipynb 6

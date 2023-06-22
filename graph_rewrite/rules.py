@@ -5,7 +5,7 @@ __all__ = ['Rule']
 
 # %% ../nbs/07_rules.ipynb 4
 from networkx import DiGraph
-from .result_set import *
+from .match_class import *
 from typing import *
 from .core import GraphRewriteException
 

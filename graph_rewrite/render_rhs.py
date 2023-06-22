@@ -6,16 +6,16 @@ __all__ = ['RenderFunc', 'render_rhs']
 # %% ../nbs/05_render_rhs.ipynb 4
 from typing import *
 from jinja2 import Template
-from .result_set import Match, ResultSet
+from .match_class import Match
 
 # %% ../nbs/05_render_rhs.ipynb 5
 RenderFunc = Callable[[Match], str] # type of a function to render a parameter
 
 # %% ../nbs/05_render_rhs.ipynb 7
-def render_rhs(result_set: ResultSet, rhs: str, render_funcs: Dict[str, RenderFunc]) -> List[str]:
+def render_rhs(match_list: List[Match], rhs: str, render_funcs: Dict[str, RenderFunc]) -> List[str]:
     template_rhs = Template(rhs)
     rendered_rhs: List[str] = []
-    for match in result_set:
+    for match in match_list:
         cur_calc_args = {attr: render_funcs[attr](match) for attr in render_funcs.keys()}
         cur_rendered = template_rhs.render(cur_calc_args)
         rendered_rhs.append(cur_rendered)
