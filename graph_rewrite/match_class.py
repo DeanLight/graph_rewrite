@@ -83,6 +83,9 @@ class Match:
                 return self.__get_node(key)
         except:
             raise GraphRewriteException("The symbol does not exist in the pattern, or it was removed from the graph")
+        
+    def __str__(self):
+        return self.mapping.__str__()
 
 # %% ../nbs/02_match_class.ipynb 18
 def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, NodeName]) -> Match:

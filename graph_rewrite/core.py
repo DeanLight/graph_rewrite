@@ -5,7 +5,8 @@ __all__ = ['NodeName', 'EdgeName', 'node_size', 'node_color', 'hl_node_color', '
            'edge_color', 'edge_width', 'hl_edge_color', 'hl_edge_width', 'layouting_method', 'GraphRewriteException']
 
 # %% ../nbs/00_core.ipynb 4
-from networkx import DiGraph, planar_layout, draw_networkx_nodes, draw_networkx_labels, draw_networkx_edges
+from networkx import DiGraph, planar_layout, spring_layout, draw_networkx_nodes, draw_networkx_labels, draw_networkx_edges
+import matplotlib.pyplot as plt
 from typing import *
 
 # %% ../nbs/00_core.ipynb 6
@@ -14,18 +15,20 @@ class GraphRewriteException(Exception):
     pass
 
 # %% ../nbs/00_core.ipynb 9
-NodeName = Hashable
+NodeName = str
 # When defining an edge, the first node is the source and the second is the target (as we use directed graphs).
 EdgeName = Tuple[NodeName, NodeName]
 
 # %% ../nbs/00_core.ipynb 11
-def _create_graph(nodes: list[NodeName], edges: list[EdgeName]) -> DiGraph:
+def _create_graph(nodes: list[Union[NodeName, Tuple[NodeName, dict]]], edges: list[Union[EdgeName, Tuple[NodeName, NodeName, dict]]]) -> DiGraph:
     """Construct a directed graph (NetworkX DiGraph) out of lists of nodes and edges.
 
     Args:
-        nodes (list[NodeName]): a list of node names. e.g., ['A', 'B', 1, 2].
-        edges (list[EdgeName]): a list of edges, each defined by a tuple of two node names (source, target).
-            e.g., [('A','B'), (1,'A')].
+        nodes (list[Union[NodeName, Tuple[NodeName, dict]]]): 
+            a list of node names (with or without attributes). e.g., ['A', 'B', (1, {'attr': 5}), 2].
+        edges (list[Union[EdgeName, Tuple[NodeName, NodeName, dict]]]):
+            a list of edges, each defined by a tuple of two node names (source, target), perhaps with attributes added.
+            e.g., [('A','B'), (1,'A', {'attr': 5})].
 
     Returns:
         DiGraph: the newly constructed DiGraph.
@@ -71,10 +74,14 @@ def _plot_graph(g: DiGraph, hl_nodes: List[NodeName] = [], hl_edges: List[EdgeNa
     non_hl_edges = [edge for edge in g.edges() if edge not in hl_edges]
 
     # plotting
-    pos = layouting_method(g)
-    draw_networkx_nodes(g, pos, nodelist=non_hl_nodes, node_size=node_size, node_color=node_color)
-    draw_networkx_nodes(g, pos, nodelist=hl_nodes, node_size=node_size, node_color=hl_node_color)
-    draw_networkx_labels(g, pos, font_size=font_size, font_color=font_color)
-    draw_networkx_edges(g, pos, edgelist=non_hl_edges, arrowsize=arrow_size, node_size=node_size, edge_color=edge_color, width=edge_width)
-    draw_networkx_edges(g, pos, edgelist=hl_edges, arrowsize=arrow_size, node_size=node_size, edge_color=hl_edge_color, width=hl_edge_width)
-    
+    for layout in [layouting_method, spring_layout]:
+        try:
+            pos = layout(g)
+            draw_networkx_nodes(g, pos, nodelist=non_hl_nodes, node_size=node_size, node_color=node_color)
+            draw_networkx_nodes(g, pos, nodelist=hl_nodes, node_size=node_size, node_color=hl_node_color)
+            draw_networkx_labels(g, pos, font_size=font_size, font_color=font_color)
+            draw_networkx_edges(g, pos, edgelist=non_hl_edges, arrowsize=arrow_size, node_size=node_size, edge_color=edge_color, width=edge_width)
+            draw_networkx_edges(g, pos, edgelist=hl_edges, arrowsize=arrow_size, node_size=node_size, edge_color=hl_edge_color, width=hl_edge_width)
+            return
+        except:
+            print("Graph isn't planar, priniting in spring layout mode.")
