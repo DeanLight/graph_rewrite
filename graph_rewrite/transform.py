@@ -54,19 +54,49 @@ def _add_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_add: dict):
 # check out regraph files: regraph/graphs.py, regraph/rules.py, regraph/utils.py
 
 def rewrite_match(input_graph: DiGraph, match: Match, rule: Rule):
-  
   mapping = match.mapping
   mapping_p_graph = {}
 
-  # clone nodes (including their edges and attributes)  
-  # delete nodes and preserve others
-  # delete edges
-  # remove node attributes
-  # remove edge attributes
+  # Start restrictive phase:
+  #   Initialize an empty mapping from P nodes to input_graph nodes.
 
-  # merge nodes
-  # add nodes
-  # add edges
-  # add node attributes
-  # add edge attributes
+  # Clone nodes:
+  #   Find all LHS nodes that should be cloned (and what are their clones in P).
+  #   For each clone of an LHS node (apart from the first one), add it to the input graph 
+  #   (clone with edges and attributes) and add the pair (clone_name, lhs_node_name) to the p->input mapping.
+
+  # Remove nodes, complete p->input mapping with preserved nodes which are not clones:
+  #   Find all LHS nodes that should be removed. 
+  #   For each LHS node, if should be removed - remove it from input.
+  #                      otherwise, if it is not a clone, add to the mapping.
+
+  # Remove edges.
+
+  # Remove node attrs.
+
+  # Remove edge attrs.
+
+  # We now have an updated input graph, with clones added and after removing everything the rule
+  # should remove. The P->input mapping is now complete for all nodes in P.
+
+  # Start expansive phase:
+  #   Initialize an empty mapping from RHS nodes to input_graph nodes.
+
+  # Merge nodes:
+  #   Find all RHS nodes that are a merge of P nodes (and what P nodes they merge).
+  #   For each RHS node that is a merge, merge all of the relavant P node, add the resulting RHS node to the input.
+  #   Also removes from input the P nodes that were merged into a new node.
+  #   Save the new RHS merged node to the RHS->input mapping.
+
+  # Add nodes, complete RHS->input mapping with added (and preserved) nodes:
+  #   Find all RHS nodes that should be added to the input (not including nodes that are a merge of P noeds).
+  #   For each RHS node, if should be added - add it to input and to the RHS->input mapping.
+  #                      otherwise, if is not a merge - add to the mapping.
+
+  # Add edges.
+
+  # Add node attrs.
+
+  # Add edge attrs.
+  
   pass

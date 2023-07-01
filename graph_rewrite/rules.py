@@ -11,54 +11,64 @@ from .core import GraphRewriteException, NodeName, EdgeName, _create_graph, _plo
 
 # %% ../nbs/05_rules.ipynb 6
 class Rule:
+    """A transformation rule, defined by 1-3 graphs:
+    - LHS - defines the pattern to search for in the graph.
+    - P - defines what parts to preserve (and also defines clones).
+    - RHS - defines what parts to add (and also defines merges).
+    """
     def __init__(self, lhs: DiGraph, p: DiGraph = None, rhs: DiGraph = None):
         self.lhs = lhs
-        # self.p = p if p else DiGraph()
         self.p = p if p else self.lhs.copy()
         self.rhs = rhs if rhs else self.p.copy()
         
-        self.p_to_lhs, self.p_to_rhs = {}, {}
-        self.merge_sym, self.clone_sym = '&', '*'
+        self._p_to_lhs, self._p_to_rhs = {}, {}
+        self._merge_sym, self._clone_sym = '&', '*'
         self._create_p_lhs_hom()
         self._create_p_rhs_hom()
 
-        self.rev_p_lhs = self._reversed_dictionary(self.p_to_lhs)
-        self.rev_p_rhs = self._reversed_dictionary(self.p_to_rhs)
+        self._rev_p_lhs = self._reversed_dictionary(self._p_to_lhs)
+        self._rev_p_rhs = self._reversed_dictionary(self._p_to_rhs)
         self._validate_rule()
 
     # Utils
     def _create_p_lhs_hom(self):
+        """Construct the homomorphism from P to LHS based on the rule.
+        Handles cloned nodes.
+        """
         for p_node in self.p.nodes():
-            if self.clone_sym in str(p_node):
-                if len(str(p_node).split(self.clone_sym)) == 2:
-                    lhs_node, copy_num = str(p_node).split(self.clone_sym)
+            if self._clone_sym in str(p_node):
+                if len(str(p_node).split(self._clone_sym)) == 2:
+                    lhs_node, copy_num = str(p_node).split(self._clone_sym)
                     if lhs_node not in self.lhs.nodes():
                         raise GraphRewriteException(f"Node {p_node} clones an non-existing node {lhs_node}.")
                     elif not copy_num.isnumeric():
                         raise GraphRewriteException(f"Node {p_node} clone id {copy_num} is illegal.")
                     else:
-                        self.p_to_lhs[p_node] = lhs_node
+                        self._p_to_lhs[p_node] = lhs_node
                 else:
                     raise GraphRewriteException(f"Node {p_node} has a bad formatted name.")
             elif p_node in self.lhs.nodes():
-                self.p_to_lhs[p_node] = p_node
+                self._p_to_lhs[p_node] = p_node
             else:
                 raise GraphRewriteException(f"Node {p_node} in P does not exist in LHS.")
 
     def _create_p_rhs_hom(self):
+        """Construct the homomorphism from P to RHS based on the rule.
+        Handles merged nodes.
+        """
         for rhs_node in self.rhs.nodes():
-            if self.merge_sym in str(rhs_node):
-                if len(str(rhs_node).split(self.merge_sym)) > 1:
-                    p_nodes = str(rhs_node).split(self.merge_sym)
+            if self._merge_sym in str(rhs_node):
+                if len(str(rhs_node).split(self._merge_sym)) > 1:
+                    p_nodes = str(rhs_node).split(self._merge_sym)
                     if all([p_node in self.p.nodes() for p_node in p_nodes]):
                         for p_node in p_nodes:
-                            self.p_to_rhs[p_node] = rhs_node
+                            self._p_to_rhs[p_node] = rhs_node
                     else:
                         raise GraphRewriteException(f"Node {rhs_node} merges at least one non-existing P node.")
         for p_node in self.p.nodes():
-            if p_node not in self.p_to_rhs.keys():
+            if p_node not in self._p_to_rhs.keys():
                 if p_node in self.rhs.nodes():
-                    self.p_to_rhs[p_node] = p_node
+                    self._p_to_rhs[p_node] = p_node
                 else:
                     raise GraphRewriteException(f"Node {p_node} in P does not exist in RHS, nor merges into an RHS node.")
 
@@ -99,8 +109,51 @@ class Rule:
         """
         return set(dict1.keys()) - set(dict2.keys())
 
+    def _merge_dictionaries(self, dict1: dict, dict2: dict) -> dict:
+        merged = {}
+        for key in dict1.keys():
+            if key in dict2.keys():
+                merged[key] = dict2[key] # TODO
+            else:
+                merged[key] = dict1[key]
+        for key in dict2.keys():
+            if key not in dict1.keys():
+                merged[key] = dict2[key]
+        return merged
+
     def _validate_rule(self):
         pass # TODO
+
+    def _merge_node_attrs(self, rhs_node: NodeName, p_origins: list[NodeName]) -> dict:
+        """Given a node in RHS that is a copy / a merge of one or more nodes in P,
+        and the P nodes which it copies / merges, returns the dictionary of attributes
+        in the new merged node in RHS.
+
+        Args:
+            rhs_node (NodeName): A node in RHS
+            p_origins (list[NodeName]): A list of P nodes which rhs_node merges.
+
+        Returns:
+            dict: A dictionary of attributes (keys and values) of the merged rhs node.
+        """
+        merge_rhs_attrs = {}
+        for p_origin in p_origins:
+            new_rhs_attrs = {k: self.rhs.nodes(data=True)[rhs_node][k] for k in \
+                                self._dict_key_difference(self.rhs.nodes(data=True)[rhs_node], 
+                                                          self.p.nodes(data=True)[p_origin])}
+            merge_rhs_attrs = self._merge_dictionaries(merge_rhs_attrs, new_rhs_attrs)
+        return merge_rhs_attrs
+
+    def _merge_edge_attrs(self, rhs_edge: EdgeName, s_origins: list[NodeName], t_origins: list[NodeName]) -> dict:
+        merge_rhs_attrs = {}
+        for s_origin in s_origins:
+            for t_origin in t_origins:
+                if (s_origin, t_origin) in self.p.edges():
+                    new_rhs_attrs = {k: self.rhs.get_edge_data(*rhs_edge)[k] for k in \
+                                        self._dict_key_difference(self.rhs.get_edge_data(*rhs_edge), 
+                                                                  self.p.get_edge_data(s_origin, t_origin))}
+                    merge_rhs_attrs = self._merge_dictionaries(merge_rhs_attrs, new_rhs_attrs)
+        return merge_rhs_attrs
 
     # The following functions are presented in the order of transformation.
     def nodes_to_clone(self) -> dict[NodeName, set[NodeName]]:
@@ -114,8 +167,8 @@ class Rule:
                 A dictionary which maps each cloned node in LHS to a set
                 of all nodes in P which are its clones.
         """
-        return {lhs_node: self.rev_p_lhs[lhs_node] for lhs_node in self.lhs.nodes() \
-                            if len(self._keys_from_val(self.rev_p_lhs, lhs_node)) > 1}
+        return {lhs_node: self._rev_p_lhs[lhs_node] for lhs_node in self.lhs.nodes() \
+                            if len(self._keys_from_val(self._rev_p_lhs, lhs_node)) > 1}
 
     def nodes_to_remove(self) -> set[NodeName]:
         """Find all nodes that should be removed.
@@ -125,7 +178,7 @@ class Rule:
         Returns:
             set[NodeName]: Nodes in LHS which should be removed.
         """
-        return {lhs_node for lhs_node in self.lhs.nodes() if len(self._keys_from_val(self.rev_p_lhs, lhs_node)) == 0}
+        return {lhs_node for lhs_node in self.lhs.nodes() if len(self._keys_from_val(self._rev_p_lhs, lhs_node)) == 0}
 
     def edges_to_remove(self) -> set[EdgeName]:
         """Find all edges that should be removed (other than edges connected to removed nodes).
@@ -141,7 +194,7 @@ class Rule:
         """
         edges_to_remove = set()
         for s, t in self.lhs.edges():
-            s_copies, t_copies = self._keys_from_val(self.rev_p_lhs, s), self._keys_from_val(self.rev_p_lhs, t)
+            s_copies, t_copies = self._keys_from_val(self._rev_p_lhs, s), self._keys_from_val(self._rev_p_lhs, t)
             if len(s_copies) == 0 or len(t_copies) == 0: # one of the endpoints was removed
                 continue # don't count this edge
             for s_copy in s_copies:
@@ -163,7 +216,7 @@ class Rule:
         """
         attrs_to_remove = {}
         for node_lhs in self.lhs.nodes():
-            p_copies = self._keys_from_val(self.rev_p_lhs, node_lhs)
+            p_copies = self._keys_from_val(self._rev_p_lhs, node_lhs)
             for node_p in p_copies:
                 diff_attrs = self._dict_key_difference(
                     self.lhs.nodes(data=True)[node_lhs],
@@ -183,7 +236,7 @@ class Rule:
         """
         attrs_to_remove = {}
         for s, t in self.lhs.edges():
-            s_copies, t_copies = self._keys_from_val(self.rev_p_lhs, s), self._keys_from_val(self.rev_p_lhs, t)
+            s_copies, t_copies = self._keys_from_val(self._rev_p_lhs, s), self._keys_from_val(self._rev_p_lhs, t)
             for s_copy in s_copies:
                 for t_copy in t_copies:
                     if (s_copy, t_copy) in self.p.edges():
@@ -206,8 +259,8 @@ class Rule:
                 A dictionary which maps each node in RHS that is a merge of P nodes,
                 to a set of nodes in P which it merges.
         """
-        return {rhs_node: self.rev_p_rhs[rhs_node] for rhs_node in self.rhs.nodes() \
-                            if len(self._keys_from_val(self.rev_p_rhs, rhs_node)) > 1}
+        return {rhs_node: self._rev_p_rhs[rhs_node] for rhs_node in self.rhs.nodes() \
+                            if len(self._keys_from_val(self._rev_p_rhs, rhs_node)) > 1}
 
     def nodes_to_add(self) -> set[NodeName]:
         """Find all nodes which should be added.
@@ -217,7 +270,7 @@ class Rule:
         Returns:
             set[NodeName]: Nodes which should be added to RHS.
         """
-        return {rhs_node for rhs_node in self.rhs.nodes() if len(self._keys_from_val(self.rev_p_rhs, rhs_node)) == 0}
+        return {rhs_node for rhs_node in self.rhs.nodes() if len(self._keys_from_val(self._rev_p_rhs, rhs_node)) == 0}
 
     def edges_to_add(self) -> set[EdgeName]:
         """Find all edges that should be added.
@@ -230,7 +283,7 @@ class Rule:
         """
         edges_to_add = set()
         for s, t in self.rhs.edges():
-            s_copies, t_copies = self._keys_from_val(self.rev_p_rhs, s), self._keys_from_val(self.rev_p_rhs, t)
+            s_copies, t_copies = self._keys_from_val(self._rev_p_rhs, s), self._keys_from_val(self._rev_p_rhs, t)
             if len(s_copies) == 0 or len(t_copies) == 0: # edge with new endpoint(s)
                 edges_to_add.add((s,t)) # surely a new edge
             # Edges that were created by merging OR New edges from existing nodes
@@ -252,10 +305,31 @@ class Rule:
         Returns:
             dict[NodeName, dict]: A dictionary that maps nodes in RHS to their added attributes and values.
         """
-        #TODO: implement
-        return {}
+        attrs_to_add = {}
+        for node_rhs in self.rhs.nodes():
+            p_origins = self._keys_from_val(self._rev_p_rhs, node_rhs)
+            # If RHS node has no origins (added)
+            if len(p_origins) == 0:
+                rhs_attrs = self.rhs.nodes(data=True)[node_rhs]
+                if len(rhs_attrs) != 0:
+                    attrs_to_add[node_rhs] = rhs_attrs
+            else:
+                merged_p_attrs = self._merge_node_attrs(node_rhs, p_origins)
+                if len(merged_p_attrs) != 0:
+                    attrs_to_add[node_rhs] = merged_p_attrs
+        return attrs_to_add
 
     def edge_attrs_to_add(self) -> dict[EdgeName, dict]:
-        #TODO: implement
-        return {}
+        attrs_to_add = {}
+        for s, t in self.rhs.edges():
+            s_origins, t_origins = self._keys_from_val(self._rev_p_rhs, s), self._keys_from_val(self._rev_p_rhs, t)
+            if len(s_origins) == 0 or len(t_origins) == 0:
+                rhs_attrs = self.rhs.get_edge_data(s, t)
+                if len(rhs_attrs) != 0:
+                    attrs_to_add[(s, t)] = rhs_attrs
+            else:
+                merged_p_attrs = self._merge_edge_attrs((s, t), s_origins, t_origins)
+                if len(merged_p_attrs) != 0:
+                    attrs_to_add[(s, t)] = merged_p_attrs
+        return attrs_to_add
 

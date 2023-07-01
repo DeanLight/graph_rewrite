@@ -58,13 +58,13 @@ hl_edge_width = 2
 layouting_method = planar_layout
 
 # %% ../nbs/00_core.ipynb 15
-def _plot_graph(g: DiGraph, hl_nodes: List[NodeName] = [], hl_edges: List[EdgeName] = []):
+def _plot_graph(g: DiGraph, hl_nodes: set[NodeName] = set(), hl_edges: set[EdgeName] = set()):
     """Plot a graph, and potentially highlight certain nodes and edges.
 
     Args:
         g (DiGraph): a graph to plot
-        hl_nodes (List[NodeName], optional): list of node names to highlight. Defaults to [].
-        hl_edges (List[EdgeName], optional): list of edge names to highlight. Defaults to [].
+        hl_nodes (set[NodeName], optional): set of node names to highlight. Defaults to set().
+        hl_edges (set[EdgeName], optional): set of edge names to highlight. Defaults to set().
     """
 
     # Seperate highlighted nodes and edges, remove if doesn't exist in the graph g
