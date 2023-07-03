@@ -4,6 +4,16 @@
 __all__ = ['lhs_parser', 'cnt', 'lhsTransformer', 'lhs_to_graph']
 
 # %% ../nbs/01_lhs_parsing.ipynb 4
+import copy
+import networkx as nx
+from lark import Transformer
+from lark import Lark
+from .match_class import Match
+from .core import GraphRewriteException
+from lark import UnexpectedCharacters, UnexpectedToken
+from .core import _create_graph, _plot_graph, GraphRewriteException
+
+# %% ../nbs/01_lhs_parsing.ipynb 8
 lhs_parser = Lark(r"""
     %import common.INT -> INT 
     %import common.FLOAT -> FLOAT
@@ -41,14 +51,8 @@ lhs_parser = Lark(r"""
 
 # multi_connection: "-" NATURAL_NUMBER "+" [attributes] "->"  - setting for the "-num+->" feature
 
-# %% ../nbs/01_lhs_parsing.ipynb 6
-import itertools
-import copy
-import networkx as nx
-
-# %% ../nbs/01_lhs_parsing.ipynb 7
+# %% ../nbs/01_lhs_parsing.ipynb 10
 cnt:int = 0 # unique id for anonymous vertices
-from lark import Tree, Transformer
 class lhsTransformer(Transformer):
     def __init__(self, visit_tokens: bool = True) -> None:
         super().__init__(visit_tokens)
@@ -56,60 +60,66 @@ class lhsTransformer(Transformer):
         self.cnt = 0
 
     def STRING(self, arg):
-        return arg[1:-1] # remove " "
+        # remove " "
+        return arg[1:-1] 
     
     def BOOLEAN(self, arg):
         return bool(arg)
     
-    def INT(self, arg): # can be negative
+    def INT(self, arg):
+        # can be negative
         return int(arg)
     
     def FLOAT(self, arg):
         return float(arg)
     
-    def NATURAL_NUMBER(self, number): # for duplications
+    def NATURAL_NUMBER(self, number): 
+        # represents number of duplications
         return int(number)
     
-    def value(self, args): # one argument encased in a list
+    def value(self, args): 
+        # one argument encased in a list
         return args[0]
     
-    def attribute(self, args): #(attr_name, *rest):
+    def attribute(self, args): 
         # if an optional token was not parsed, None is placed in the parse tree.
         attr_name, type, value = args
         # pass a tuple of attr_name, required type, required value.
-        return (attr_name, type, value) # constraints are handled in other transformer.
+        return (attr_name, type, value)
     
     def attributes(self, attributes): # a list of triples 
         # return a packed list of the attribute names.
         attr_names, constraints = {}, {}
         for attribute in attributes:
-            attr_names[str(attribute[0])] = None # will be added to the graph itself
-            constraints[str(attribute[0])] = (attribute[1], attribute[2]) # will be added to the condition function
-        print("constraints found on: " + str(constraints.keys()))
+            # will be added to the graph itself
+            attr_names[str(attribute[0])] = None 
+            # will be added to the condition function
+            constraints[str(attribute[0])] = (attribute[1], attribute[2]) 
         return (attr_names, constraints)
 
     def multi_connection(self, args): # +
         # return the list of attributes(strings), add a special attribute to denote number of duplications.
-        #   for "-+->" implementation also return FALSE if "+" is parsed (indicating that the connection is not deterministic)
         number, attributes = args
         if attributes == None:
             attributes = ({},{})
-        attributes[0]["$dup"] = number # removed in graph construction
+        # add a special atrribute to handle duplications during construction
+        attributes[0]["$dup"] = number 
         return attributes
 
-    def connection(self, attributes): # (dict of attributes, constraints: attribute -> (val,type))
-        # return the packed list of attributes received, num_duplications = 1, is_deterministic = True
-        attributes = attributes[0]
+    def connection(self, args): 
+        # (tuple of dicts: attributes, constraints. attributes is of the form: attribute -> val)
+        attributes = args[0]
         if attributes == None:
             attributes = ({},{})
+        # add a special atrribute to handle duplications during construction
         attributes[0]["$dup"] = 1
         return (attributes, True)
 
-    def ANONYMUS(self): #
-        # return a dedicated name for anonymus (string), and an empty list.
-        x = ("$" + str(cnt), [])
+    def ANONYMUS(self, _): #
+        # return a dedicated name for anonymus (string), and an empty indices list.
+        x = "_" + str(self.cnt)
         self.cnt += 1
-        return x
+        return (x, [])
 
     def index_vertex(self, args):
         # return the main name of the vertex, and a list of the indices specified.
@@ -117,59 +127,64 @@ class lhsTransformer(Transformer):
         return (main_name_tup[0], list(numbers))
     
     def NAMED_VERTEX(self, name):
-        # return the main name of the vertex, and an empty list.
+        # return the main name of the vertex, and an empty indices list.
         return (name, [])
 
     def vertex(self, args): # (vertex_tuple: tuple, attributes: list)
-        # return arguments
-        vertex_tuple, *attributes = args # attributes is a empty list/ a list containing a tuple: (names dict, constraints dict)
-        name, indices_list = vertex_tuple 
+        # attributes is a empty list/ a list containing a tuple: (names dict, constraints dict)
+        vertex_tuple, *attributes = args 
+        name, indices_list = vertex_tuple
 
-        if indices_list == None:
-            indices_list = []
+        # create new name
         indices = ",".join([str(num) for num in indices_list])
-        new_name =  name + "<" + indices + ">" if indices == [] else str(name) # numbers are strings, no convertion needed.
+        if len(indices) == 0:
+            new_name = str(name)
+        else:
+            new_name =  name + "<" + indices + ">" 
+
+        # no attributes to handle
         if attributes[0] == None:
             return (new_name, {})
+        
         # now that we have the vertex name we add the attribute constraints:
         # vertices may appear multiple times in LHS thus we unite the constraints. We assume there cannot be contradicting constraints.
-        attribute_names, constraints = attributes[0] # extract from list
+        attribute_names, constraints = attributes[0] 
         # the second element of the tuple is the constraints dict: attr_name -> (value,type)
-        self.constraints[new_name] = {}
+        if new_name not in self.constraints.keys():
+            self.constraints[new_name] = {}
         self.constraints[new_name] = self.constraints[new_name] | constraints 
-        return (new_name, attribute_names) #(string, dict)
+        return (new_name, attribute_names)
 
     def pattern(self, args):
         # 1) unpack lists of vertices and connections.
         vertex, *rest = args
         conn, vertices = list(rest)[::2], list(rest)[1::2]
         vertices.insert(0,vertex)
-        # print(vertices)
-        # print(conn)
         # 2) create a networkX graph:
             # Future feature: if there is a special attribute with TRUE (deterministic), dumplicate the connection $dup times.
         G = nx.DiGraph()
 
         # simplified vertion - ignore duplications
-        G.add_nodes_from(vertices) # list of tuples 
+        G.add_nodes_from(vertices)
         edge_list = []
         for i,edge in enumerate(conn):
             # for now the duplication feature is not included so we remove the $dup attribute
-            attribute_names, constraints = edge[0] # at worst will be {},{} since we handeled None in the connection rule.
+            # we handeled None in the connection rule.
+            attribute_names, constraints = edge[0]
             attribute_names.pop("$dup", 0)
-            edge_list.append((vertices[i][0], vertices[i+1][0], attribute_names)) # ignore edge[1] - determinism flag. edge[0] is the tuple of dicts of attributes.
+            # ignore edge[1] - determinism flag. edge[0] is the tuple of dicts of attributes.
+            edge_list.append((vertices[i][0], vertices[i+1][0], attribute_names)) 
+
             # add constraints - we assume an edge only appears once in LHS
-            print("edges before filter: " + str(constraints))
             filtered_cons = dict(filter(lambda tup: not tup[1] == (None, None), constraints.items()))
-            print("edges after filter: " + str(filtered_cons))
-            if filtered_cons: # not empty - there are concrete constraints
+            # check if filtered_cons is not empty - there are concrete constraints
+            if filtered_cons: 
                 self.constraints[str(vertices[i]) + "->" + str(vertices[i+1])] = filtered_cons
 
         # more complex vertion - duplications
         # create a recursive function that adds the vertices and edges, 
         # that calls itself by the number of duplications on each level.
-        print("vertices: " + str(vertices))
-        print("edges: " + str(edge_list))
+
         G.add_edges_from(edge_list)
         return G
 
@@ -179,14 +194,17 @@ class lhsTransformer(Transformer):
         # unite all the patterns into a single graph
         G = nx.DiGraph()
 
-        combined_attributes = dict() # dict of dicts (node_name -> attribute -> None)
+        # dict of dicts (node_name -> attribute -> None)
+        combined_attributes = dict() 
         new_nodes = []
         new_edges = []
         for graph in graphs:
             for node in graph.nodes:
-                combined_attributes[node] = {}
+                if node not in combined_attributes.keys():
+                    combined_attributes[node] = {}
                 combined_attributes[node] = combined_attributes[node] | graph.nodes.data()[node]
-                new_nodes.append(node) #unite the dicts for each
+                #unite the dicts for each
+                new_nodes.append(node) 
             for edge in graph.edges:
                 # we assumed edges cannot appear more than once in LHS
                 combined_attributes[edge[0] + "->" + edge[1]] = graph.edges[edge[0],edge[1]]
@@ -194,11 +212,11 @@ class lhsTransformer(Transformer):
         # filtered_attr = dict(filter(lambda _,value: not value == (None, None), combined_attributes.items()))
         G.add_nodes_from([(node, combined_attributes[node]) for node in new_nodes])
         G.add_edges_from([(node1, node2, combined_attributes[node1 + "->" + node2]) for (node1,node2) in new_edges])
+        
+        #sent as a module output and replaces condition.
+        return (G, copy.deepcopy(self.constraints)) 
 
-        return (G, copy.deepcopy(self.constraints)) #sent as a module output and replaces condition.
-
-# %% ../nbs/01_lhs_parsing.ipynb 9
-from .match_class import Match
+# %% ../nbs/01_lhs_parsing.ipynb 12
 def lhs_to_graph(lhs: str, condition):
     """Given an LHS pattern and a condition function, return the directed graph represented by the pattern, 
     along with an updated condition function that combines the original constraints and the new value and type constraints
@@ -213,27 +231,32 @@ def lhs_to_graph(lhs: str, condition):
         DiGraph, lambda: Match->bool: a networkx graph that is the graph represented by the pattern, 
                                       and an extended condition function as mentioned above.
     """
-    tree = lhs_parser.parse(lhs)
-    final_graph, constraints = lhsTransformer().transform(tree)
-    # constraints is a dictionary: vertex/edge -> {attr_name: (value, type), ...}
+    try:
+        tree = lhs_parser.parse(lhs)
+        final_graph, constraints = lhsTransformer().transform(tree)
+        # constraints is a dictionary: vertex/edge -> {attr_name: (value, type), ...}
 
-    # add the final constraints to the "condition" function
-    def type_condition(match: Match):
-        flag = True
-        for graph_obj in constraints.keys():
-            obj_constraints = constraints[graph_obj]
-            for attr_name in obj_constraints.keys():
-                required_type, required_value = obj_constraints[attr_name]
+        # add the final constraints to the "condition" function
+        def type_condition(match: Match):
+            flag = True
+            for graph_obj in constraints.keys():
+                obj_constraints = constraints[graph_obj]
+                for attr_name in obj_constraints.keys():
+                    required_type, required_value = obj_constraints[attr_name]
 
-                # check value constraint
-                if required_value != None:
-                    if not hasattr(required_value, '__eq__') or (not required_value == match[v][attr_name]):
+                    # check value constraint
+                    if required_value != None:
+                        if not hasattr(required_value, '__eq__') or (not required_value == match[graph_obj][attr_name]):
+                            flag = False
+                    
+                    # check type constraint only of value was not checked
+                    elif required_type != None and not isinstance(match[graph_obj][attr_name], required_type):
                         flag = False
-                
-                # check type constraint only of value was not checked
-                elif required_type != None and not isinstance(match[v][attr_name], required_type):
-                    flag = False
 
-        return flag and condition(match) # True <=> the match satisfies all the constraints.
-            
-    return final_graph, type_condition
+            # True <=> the match satisfies all the constraints.
+            return flag and condition(match) 
+                
+        return final_graph, type_condition
+    except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
+        raise GraphRewriteException('Unable to convert LHS: {}'.format(e))
+
