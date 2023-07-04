@@ -35,7 +35,7 @@ def is_anonymous_node(node_name: NodeName) -> bool:
     Returns:
         bool: Returns True if the node is anonymous, False otherwise.
     """
-    return len(node_name) >= 1 and node_name[0] == '$'
+    return len(node_name) >= 1 and node_name[0] == '_'
 
 # %% ../nbs/02_match_class.ipynb 16
 class Match:
