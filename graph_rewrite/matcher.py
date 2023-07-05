@@ -9,6 +9,7 @@ from networkx.algorithms import isomorphism # check subgraph's isom.
 import itertools # iterating over all nodes\edges combinations
 from .match_class import Match, mapping_to_match
 from .core import NodeName, _create_graph, _plot_graph
+from .lhs import lhs_to_graph
 from typing import *
 
 # %% ../nbs/03_matcher.ipynb 7
