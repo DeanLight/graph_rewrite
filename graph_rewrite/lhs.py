@@ -9,11 +9,11 @@ import networkx as nx
 from lark import Transformer
 from lark import Lark
 from .match_class import Match
-from .core import GraphRewriteException
+from .core import GraphRewriteException, _graphs_equal
 from lark import UnexpectedCharacters, UnexpectedToken
 from .core import _create_graph, _plot_graph, GraphRewriteException
 
-# %% ../nbs/01_lhs_parsing.ipynb 8
+# %% ../nbs/01_lhs_parsing.ipynb 6
 lhs_parser = Lark(r"""
     %import common.INT -> INT 
     %import common.FLOAT -> FLOAT
@@ -51,7 +51,7 @@ lhs_parser = Lark(r"""
 
 # multi_connection: "-" NATURAL_NUMBER "+" [attributes] "->"  - setting for the "-num+->" feature
 
-# %% ../nbs/01_lhs_parsing.ipynb 10
+# %% ../nbs/01_lhs_parsing.ipynb 8
 cnt:int = 0 # unique id for anonymous vertices
 class lhsTransformer(Transformer):
     def __init__(self, visit_tokens: bool = True) -> None:
@@ -216,7 +216,7 @@ class lhsTransformer(Transformer):
         #sent as a module output and replaces condition.
         return (G, copy.deepcopy(self.constraints)) 
 
-# %% ../nbs/01_lhs_parsing.ipynb 12
+# %% ../nbs/01_lhs_parsing.ipynb 10
 def lhs_to_graph(lhs: str, condition):
     """Given an LHS pattern and a condition function, return the directed graph represented by the pattern, 
     along with an updated condition function that combines the original constraints and the new value and type constraints

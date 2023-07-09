@@ -94,3 +94,41 @@ def _plot_graph(g: DiGraph, hl_nodes: set[NodeName] = set(), hl_edges: set[EdgeN
             return
         except:
             print("Graph isn't planar, priniting in spring layout mode.")
+
+# %% ../nbs/00_core.ipynb 17
+def _graphs_equal(graph1: DiGraph, graph2: DiGraph) -> bool:  
+    """Compare two graphs - nodes, edges and attributes.
+
+    Args:
+        graph1 (DiGraph): A NetworkX graph
+        graph2 (DiGraph): A NetworkX graph
+
+    Returns:
+        bool: True if the graphs are equal, False otherwise.
+    """
+
+    # Compare node attributes
+    for node in graph1.nodes():
+        if node not in graph2.nodes():
+            return False
+
+        attributes1 = graph1.nodes[node]
+        attributes2 = graph2.nodes[node]
+
+        if attributes1 != attributes2:
+            return False
+
+    # Compare edge attributes
+    for edge in graph1.edges():
+        if edge not in graph2.edges():
+            return False
+
+        attributes1 = graph1.edges[edge]
+        attributes2 = graph2.edges[edge]
+
+        if attributes1 != attributes2:
+            return False
+        
+    # Compare graph structures
+    #graph_structure_equal = nx.is_isomorphic(graph1, graph2)
+    return True
