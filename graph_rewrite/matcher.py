@@ -7,7 +7,7 @@ __all__ = ['FilterFunc', 'find_matches']
 from networkx import DiGraph
 from networkx.algorithms import isomorphism # check subgraph's isom.
 import itertools # iterating over all nodes\edges combinations
-from .match_class import Match, mapping_to_match
+from .match_class import Match, mapping_to_match, is_anonymous_node
 from .core import NodeName, _create_graph, _plot_graph
 from .lhs import lhs_to_graph
 from typing import *
@@ -106,6 +106,22 @@ def _node_matches_pattern(graph_node_attrs: dict, pattern: DiGraph) -> bool:
     return any([_attributes_exist(graph_node_attrs, pattern_attr) for (_, pattern_attr) in pattern.nodes(data=True)])
 
 # %% ../nbs/03_matcher.ipynb 17
+def _remove_duplicated_matches(matches: list[Match]) -> list[Match]:
+    """Remove duplicates from a list of Matches, based on their mappings.
+
+    Args:
+        matches (list[Match]): list of Match objects
+
+    Returns:
+        list[Match]: The list without duplications
+    """
+    new_list = []
+    for match in matches:
+        if match not in new_list:
+            new_list.append(match)
+    return new_list
+
+# %% ../nbs/03_matcher.ipynb 19
 def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc = lambda match: True) -> List[Match]:
     """Find all matches of a pattern graph in an input graph, for which a certain condition holds.
     That is, subgraphs of the input graph which have the same nodes, edges, attributes and required attribute values
@@ -118,7 +134,7 @@ def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc =
             for the corresponding match. Defaults to a condition function which always returns True.
 
     Returns:
-        List[Match]: List of Match objects, each corresponds to a match of the pattern in the input graph.
+        List[Match]: List of Match objects (without duplications), each corresponds to a match of the pattern in the input graph.
     """
 
     # Narrow down search space by keeping only input-graph nodes that have the same attributes as some pattern node
@@ -131,6 +147,12 @@ def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc =
     # Find matches with attributes among isoms (match pattern's attributes)
     attribute_matches = [mapping for (subgraph, mapping) in isom_matches if _isom_matches_pattern((subgraph, mapping), pattern)]
 
-    # construct a list of Match objects
-    matches_list = [mapping_to_match(input_graph, pattern, mapping) for mapping in attribute_matches]
-    return [match for match in matches_list if condition(match)]
+    # construct a list of Match objects. Note that the condition is checked on a Match that includes anonymous nodes (as it might use it)
+    # but the Match that we return does not include the anonymous parts.
+    # Therefore, we first construct a list of tuples - the first is the mapping with anonymous, the second isn't
+    matches_list = [(mapping_to_match(input_graph, pattern, mapping, filter=False), mapping_to_match(input_graph, pattern, mapping)) 
+                    for mapping in attribute_matches]
+    # Then filter the list, to contain only the filtered match whose unfiltered version matches the condition
+    filtered_matches =  [filtered_match for (unfiltered_match, filtered_match) in matches_list if condition(unfiltered_match)]
+    # And finally, remove duplicates (might be created because we removed the anonymous nodes)
+    return _remove_duplicated_matches(filtered_matches)

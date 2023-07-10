@@ -179,7 +179,7 @@ class lhsTransformer(Transformer):
             filtered_cons = dict(filter(lambda tup: not tup[1] == (None, None), constraints.items()))
             # check if filtered_cons is not empty - there are concrete constraints
             if filtered_cons: 
-                self.constraints[str(vertices[i]) + "->" + str(vertices[i+1])] = filtered_cons
+                self.constraints[str(vertices[i][0]) + "->" + str(vertices[i+1][0])] = filtered_cons
 
         # more complex vertion - duplications
         # create a recursive function that adds the vertices and edges, 
