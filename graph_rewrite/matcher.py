@@ -4,13 +4,14 @@
 __all__ = ['FilterFunc', 'find_matches']
 
 # %% ../nbs/03_matcher.ipynb 4
+from typing import *
 from networkx import DiGraph
 from networkx.algorithms import isomorphism # check subgraph's isom.
 import itertools # iterating over all nodes\edges combinations
-from .match_class import Match, mapping_to_match, is_anonymous_node
+
 from .core import NodeName, _create_graph, _plot_graph
 from .lhs import lhs_to_graph
-from typing import *
+from .match_class import Match, mapping_to_match, is_anonymous_node
 
 # %% ../nbs/03_matcher.ipynb 7
 def _attributes_exist(input_graph_attrs: dict, pattern_attrs: dict) -> bool:
@@ -30,7 +31,23 @@ def _attributes_exist(input_graph_attrs: dict, pattern_attrs: dict) -> bool:
     return set(pattern_attrs.keys()).issubset(set(input_graph_attrs.keys()))
 
 # %% ../nbs/03_matcher.ipynb 9
-def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> list[Tuple[DiGraph, dict[NodeName, NodeName]]]:
+def _does_node_match_pattern(graph_node_attrs: dict, pattern: DiGraph) -> bool:
+    """Given the attributes of some input-graph node, checks whether this node
+    has the same attributes as some node in the pattern graph. If it does,
+    then the node by match that node in the pattern - and thus, might be included
+    in a subgraph that will match the entire pattern.
+
+    Args:
+        graph_node_attrs (dict): Attributes of some input-graph node.
+        pattern (DiGraph): A pattern graph produced by the LHS Parser.
+
+    Returns:
+        bool: True if the input-graph node has the same attributes as some pattern node, False otherwise.
+    """
+    return any([_attributes_exist(graph_node_attrs, pattern_attr) for (_, pattern_attr) in pattern.nodes(data=True)])
+
+# %% ../nbs/03_matcher.ipynb 11
+def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> Tuple[DiGraph, dict[NodeName, NodeName]]:
     """Given a graph, find all of its subgraphs which have the same structure (same nodes and edges)
     as a given pattern DiGraph. That is, all subgraphs which are isomorphic to the pattern.
 
@@ -38,14 +55,12 @@ def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> list[Tuple[DiG
         graph (DiGraph): A graph to find matches in
         pattern (DiGraph): A pattern graph produced by the LHS Parser.
 
-    Returns:
-        list[Tuple[DiGraph, dict[NodeName, NodeName]]]: list of (subgraph, mapping) tuples,
+    Yields:
+        Iterator[Tuple[DiGraph, dict[NodeName, NodeName]]]: Iterator of (subgraph, mapping) tuples,
             where for each pair, the subgraph is the subset of nodes and edges in the input graph that
             match the pattern, and the mapping is a dictionary that maps nodes in that subgraph
             to nodes in the pattern.
     """
-
-    isom_matches = []
     for sub_nodes in itertools.combinations(graph.nodes, len(pattern.nodes)):
         nodes_subg: DiGraph = graph.subgraph(sub_nodes)
         for sub_edges in itertools.combinations(nodes_subg.edges(data=True), len(pattern.edges)):
@@ -57,12 +72,10 @@ def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> list[Tuple[DiG
             # Find structural matches with the selected edges and nodes
             matcher = isomorphism.DiGraphMatcher(pattern, subg)
             for isom_mapping in matcher.isomorphisms_iter():
-                isom_matches.append((nodes_subg, isom_mapping))
-                
-    return isom_matches
+                yield (nodes_subg, isom_mapping)
 
-# %% ../nbs/03_matcher.ipynb 11
-def _isom_matches_pattern(isom: Tuple[DiGraph, dict], pattern: DiGraph) -> bool:
+# %% ../nbs/03_matcher.ipynb 13
+def _does_isom_match_pattern(isom: Tuple[DiGraph, dict], pattern: DiGraph) -> bool:
     """Given a graph that is isomorphic to the pattern, checks whether they also
     match in terms of their attributes (that is, the graph has the same attributes
     as the pattern). If they does, then the isomorphic graph matches the pattern completely.
@@ -86,26 +99,10 @@ def _isom_matches_pattern(isom: Tuple[DiGraph, dict], pattern: DiGraph) -> bool:
                 for edge in pattern.edges(data=True)]):
         return True
 
-# %% ../nbs/03_matcher.ipynb 13
+# %% ../nbs/03_matcher.ipynb 15
 FilterFunc = Callable[[Match], bool]
 
-# %% ../nbs/03_matcher.ipynb 15
-def _node_matches_pattern(graph_node_attrs: dict, pattern: DiGraph) -> bool:
-    """Given the attributes of some input-graph node, checks whether this node
-    has the same attributes as some node in the pattern graph. If it does,
-    then the node by match that node in the pattern - and thus, might be included
-    in a subgraph that will match the entire pattern.
-
-    Args:
-        graph_node_attrs (dict): Attributes of some input-graph node.
-        pattern (DiGraph): A pattern graph produced by the LHS Parser.
-
-    Returns:
-        bool: True if the input-graph node has the same attributes as some pattern node, False otherwise.
-    """
-    return any([_attributes_exist(graph_node_attrs, pattern_attr) for (_, pattern_attr) in pattern.nodes(data=True)])
-
-# %% ../nbs/03_matcher.ipynb 17
+# %% ../nbs/03_matcher.ipynb 18
 def _remove_duplicated_matches(matches: list[Match]) -> list[Match]:
     """Remove duplicates from a list of Matches, based on their mappings.
 
@@ -121,7 +118,7 @@ def _remove_duplicated_matches(matches: list[Match]) -> list[Match]:
             new_list.append(match)
     return new_list
 
-# %% ../nbs/03_matcher.ipynb 19
+# %% ../nbs/03_matcher.ipynb 20
 def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc = lambda match: True) -> List[Match]:
     """Find all matches of a pattern graph in an input graph, for which a certain condition holds.
     That is, subgraphs of the input graph which have the same nodes, edges, attributes and required attribute values
@@ -138,14 +135,14 @@ def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc =
     """
 
     # Narrow down search space by keeping only input-graph nodes that have the same attributes as some pattern node
-    matching_nodes = [n for (n, attrs) in input_graph.nodes(data=True) if _node_matches_pattern(attrs, pattern)]
+    matching_nodes = [n for (n, attrs) in input_graph.nodes(data=True) if _does_node_match_pattern(attrs, pattern)]
     # Reducing the input graph to the matching nodes + connected edges
     reduced_input_g = input_graph.subgraph(matching_nodes)
     
     # Find all structural matches (isomorphisms), ignore attributes
-    isom_matches =  _find_structural_matches(reduced_input_g, pattern)
+    isom_matches =  [match for match in _find_structural_matches(reduced_input_g, pattern)]
     # Find matches with attributes among isoms (match pattern's attributes)
-    attribute_matches = [mapping for (subgraph, mapping) in isom_matches if _isom_matches_pattern((subgraph, mapping), pattern)]
+    attribute_matches = [mapping for (subgraph, mapping) in isom_matches if _does_isom_match_pattern((subgraph, mapping), pattern)]
 
     # construct a list of Match objects. Note that the condition is checked on a Match that includes anonymous nodes (as it might use it)
     # but the Match that we return does not include the anonymous parts.
