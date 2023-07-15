@@ -15,6 +15,7 @@ exceptions = {
     "clone_illegal_id": lambda p_node, copy_num: f"Node {p_node} clone id {copy_num} is illegal.",
     "p_bad_format": lambda p_node: f"Node {p_node} has a bad formatted name.",
     "p_not_in_lhs": lambda p_node: f"Node {p_node} in P does not exist in LHS.",
+    "p_edge_not_in_lhs": lambda p_s, p_t: f"Edge {(p_s, p_t)} in P does not exist (and doesn't clone any edge) in LHS.",
     "rhs_illegal_name": lambda rhs_node: f"Node {rhs_node} merges at least one non-existing P node.",
     "rhs_not_in_p": lambda p_node: f"Node {p_node} in P does not exist in RHS, nor merges into an RHS node.",
     "add_attrs_in_p_node": lambda p_node: f"P node {p_node} cannot add attributes.",
@@ -159,6 +160,11 @@ class Rule:
                         p_attrs = set(self.p.get_edge_data(s_copy, t_copy).keys())
                         if not p_attrs.issubset(rhs_attrs):
                             raise GraphRewriteException(exceptions["add_attrs_in_p_edge"](s_copy, t_copy))
+                        
+        # Edges in P must have a corresponding LHS edge
+        for p_s, p_t in self.p.edges():
+            if (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.lhs.edges():
+                raise GraphRewriteException(exceptions["p_edge_not_in_lhs"](p_s, p_t))
 
     def _validate_rhs_p(self):
         # Nodes in RHS do NOT remove attributes that are in the corresponding P node(s).
@@ -256,13 +262,13 @@ class Rule:
         return {lhs_node for lhs_node in self.lhs.nodes() if len(self._keys_from_val(self._rev_p_lhs, lhs_node)) == 0}
 
     def edges_to_remove(self) -> set[EdgeName]:
-        """Find all LHS edges that should be removed.
+        """Find all P edges that should be removed.
 
         Note: Does not include edges which one of their endpoints was removed by the rule,
         as during transformation, we begin by removing all removed nodes along with the connected edges.
 
         Returns:
-            set[EdgeName]: Edges in LHS which should be removed.
+            set[EdgeName]: Edges in P which should be removed.
         """
         edges_to_remove = set()
         for s, t in self.lhs.edges():
