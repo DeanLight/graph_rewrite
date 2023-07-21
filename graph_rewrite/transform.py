@@ -4,14 +4,15 @@
 __all__ = ['exceptions', 'rewrite_match_restrictive', 'rewrite_match_expansive', 'rewrite_match']
 
 # %% ../nbs/06_transform.ipynb 4
+from typing import *
 from networkx import DiGraph
+
 from .core import NodeName, EdgeName, _create_graph, _plot_graph, _graphs_equal, GraphRewriteException
 from .lhs import lhs_to_graph
 from .match_class import Match
 from .matcher import find_matches, FilterFunc
-from .render_rhs import RenderFunc
-from .rules import Rule
-from typing import *
+from .p_rhs_parse import RenderFunc
+from .rules import Rule, MergePolicy
 
 # %% ../nbs/06_transform.ipynb 6
 exceptions = {
@@ -19,7 +20,8 @@ exceptions = {
     "no_such_edge": lambda edge: f"Edge {edge} does not exist in the input graph.",
     "no_such_attr_in_node": lambda attr, node: f"Attribute {attr} does not exist in input graph's node {node}.",
     "no_such_attr_in_edge": lambda attr, edge: f"Attribute {attr} does not exist in input graph's edge {edge}.",
-    "edge_exists": lambda edge: f"Edge {edge} already exists in the input graph."
+    "edge_exists": lambda edge: f"Edge {edge} already exists in the input graph.",
+    "not_enough_to_merge": lambda nodes: f"Tried to merge less than two nodes, with list {nodes}."
 }
 
 # %% ../nbs/06_transform.ipynb 7
@@ -87,9 +89,79 @@ def _remove_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_remove: set):
         del graph.edges[edge][attr]
 
 # %% ../nbs/06_transform.ipynb 13
-def _merge_nodes(graph: DiGraph, nodes_to_merge: set[NodeName]) -> NodeName:
-    # TODO: not implemented yet
-    pass
+def _merge_nodes(graph: DiGraph, nodes_to_merge: set[NodeName], merge_policy) -> NodeName:
+    if len(nodes_to_merge) <= 1:
+        raise GraphRewriteException(exceptions["not_enough_to_merge"](nodes_to_merge))
+    for node_to_merge in nodes_to_merge:
+        if node_to_merge not in graph.nodes:
+            raise GraphRewriteException(exceptions["no_such_node"](node_to_merge))
+
+    merged_node_name = _generate_new_node_name(graph, "&".join(nodes_to_merge))
+    
+    merged_node_attrs = {}
+    merged_src_nodes, merged_target_nodes = set(), set()
+    merged_src_attrs, merged_target_attrs = {}, {} # map a src/target node to the edge's merged attrs
+    self_loop, self_loop_attrs = False, {}
+    
+    for node_to_merge in nodes_to_merge:
+        merged_node_attrs = merge_policy(merged_node_attrs, graph.nodes[node_to_merge])
+        
+        in_edges, out_edges = graph.in_edges(node_to_merge), graph.out_edges(node_to_merge)
+        merged_src_nodes.update({s if s not in nodes_to_merge else merged_node_name for s, _ in in_edges})
+        merged_target_nodes.update({t if t not in nodes_to_merge else merged_node_name for _, t in out_edges})
+
+        for edge in in_edges:
+            edge_attrs, src = graph.edges[edge], edge[0]
+            # Add to source attributes
+            if src not in merged_src_attrs.keys():
+                merged_src_attrs[src] = edge_attrs
+            else:
+                merged_src_attrs[src] = merge_policy(merged_src_attrs[src], edge_attrs)
+
+            # Handle selp loop
+            if src in nodes_to_merge:
+                self_loop = True
+                self_loop_attrs = merge_policy(self_loop_attrs, edge_attrs)
+            
+        for edge in out_edges:
+            edge_attrs, target = graph.edges[edge], edge[1]
+            # Add to source attributes
+            if target not in merged_target_attrs.keys():
+                merged_target_attrs[target] = edge_attrs
+            else:
+                merged_target_attrs[target] = merge_policy(merged_target_attrs[target], edge_attrs)
+
+            # Handle selp loop
+            if target in nodes_to_merge:
+                self_loop = True
+                self_loop_attrs = merge_policy(self_loop_attrs, edge_attrs)
+
+        graph.remove_node(node_to_merge)
+
+    # Add merged node to graph
+    graph.add_node(merged_node_name, **merged_node_attrs)
+
+    # Add merged source and target edges (including a new self loop)
+    if self_loop:
+        graph.add_edge(merged_node_name, merged_node_name, **self_loop_attrs)
+    for src_node in merged_src_nodes:
+        if (src_node, merged_node_name) not in graph.edges():
+            graph.add_edge(src_node, merged_node_name)
+    for target_node in merged_src_nodes:
+        if (merged_node_name, target_node) not in graph.edges():
+            graph.add_edge(merged_node_name, target_node)
+    
+    # Add edge attributes (other than selp loop)
+    for src_node, attrs in merged_src_attrs.items():
+        if src_node not in nodes_to_merge:
+            graph.update(edges=[(src_node, merged_node_name, merged_src_attrs[src_node])])
+            # graph.edges[(src_node, merged_node_name)] = merged_src_attrs[src_node]
+    for target_node, attrs in merged_target_attrs.items():
+        if target_node not in nodes_to_merge:
+            graph.update(edges=[(merged_node_name, target_node, merged_target_attrs[target_node])])
+            # graph.edges[(merged_node_name, target_node)] = merged_target_attrs[target_node]
+
+    return merged_node_name       
 
 # %% ../nbs/06_transform.ipynb 14
 def _add_node(graph: DiGraph, node_to_add: NodeName) -> NodeName:
@@ -124,7 +196,7 @@ def _add_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_add: dict):
     for attr, val in attrs_to_add.items():
         graph.edges[edge][attr] = val
 
-# %% ../nbs/06_transform.ipynb 20
+# %% ../nbs/06_transform.ipynb 19
 def rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: dict[NodeName, NodeName]) -> dict[NodeName, NodeName]:
     # Initialize an empty mapping from P nodes to input_graph nodes.
     p_input_map = {}
@@ -178,7 +250,7 @@ def rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: d
 
     return p_input_map
 
-# %% ../nbs/06_transform.ipynb 21
+# %% ../nbs/06_transform.ipynb 20
 def rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict[NodeName, NodeName]):
     # Initialize an empty mapping from RHS nodes to input_graph nodes.
     rhs_input_map = {}
@@ -192,7 +264,7 @@ def rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict[
     merge_rhs_nodes = rule.nodes_to_merge().keys()
     for merge_rhs_node, p_merged in rule.nodes_to_merge().items():
         input_nodes_to_merge = [p_input_map[p_node] for p_node in p_merged]
-        new_merged_id = _merge_nodes(input_graph, input_nodes_to_merge)
+        new_merged_id = _merge_nodes(input_graph, input_nodes_to_merge, rule.merge_policy)
         print(f"Merge {input_nodes_to_merge} as {new_merged_id}")
         rhs_input_map[merge_rhs_node] = new_merged_id
 
@@ -225,7 +297,7 @@ def rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict[
         print(f"Added attrs {attrs_to_add} to edge {(rhs_input_map[rhs_src], rhs_input_map[rhs_target])}")
         _add_edge_attrs(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]), attrs_to_add)
 
-# %% ../nbs/06_transform.ipynb 22
+# %% ../nbs/06_transform.ipynb 21
 def rewrite_match(input_graph: DiGraph, match: Match, rule: Rule):
   lhs_input_map = match.mapping
   p_input_map = rewrite_match_restrictive(input_graph, rule, lhs_input_map)

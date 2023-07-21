@@ -103,23 +103,23 @@ def _does_isom_match_pattern(isom: Tuple[DiGraph, dict], pattern: DiGraph) -> bo
 FilterFunc = Callable[[Match], bool]
 
 # %% ../nbs/03_matcher.ipynb 18
-def _remove_duplicated_matches(matches: list[Match]) -> list[Match]:
-    """Remove duplicates from a list of Matches, based on their mappings.
+def _remove_duplicated_matches(matches: list[Match]) -> Match:
+    """Remove duplicates from a list of Matches, based on their mappings. Return an iterator of the matches without duplications.
 
     Args:
         matches (list[Match]): list of Match objects
 
-    Returns:
-        list[Match]: The list without duplications
+    Yields:
+        Iterator[list[Match]]: Iterator of the matches without duplications.
     """
     new_list = []
     for match in matches:
         if match not in new_list:
             new_list.append(match)
-    return new_list
+            yield match
 
 # %% ../nbs/03_matcher.ipynb 20
-def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc = lambda match: True) -> List[Match]:
+def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc = lambda match: True) -> Match:
     """Find all matches of a pattern graph in an input graph, for which a certain condition holds.
     That is, subgraphs of the input graph which have the same nodes, edges, attributes and required attribute values
     as the pattern defines, which satisfy any additional condition the user defined.
@@ -130,8 +130,8 @@ def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc =
         condition (FilterFunc, optional): A function which recives a Match objects, and checks whether some condition holds
             for the corresponding match. Defaults to a condition function which always returns True.
 
-    Returns:
-        List[Match]: List of Match objects (without duplications), each corresponds to a match of the pattern in the input graph.
+    Yields:
+        Iterator[Match]: Iterator of Match objects (without duplications), each corresponds to a match of the pattern in the input graph.
     """
 
     # Narrow down search space by keeping only input-graph nodes that have the same attributes as some pattern node
@@ -152,4 +152,4 @@ def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc =
     # Then filter the list, to contain only the filtered match whose unfiltered version matches the condition
     filtered_matches =  [filtered_match for (unfiltered_match, filtered_match) in matches_list if condition(unfiltered_match)]
     # And finally, remove duplicates (might be created because we removed the anonymous nodes)
-    return _remove_duplicated_matches(filtered_matches)
+    yield from _remove_duplicated_matches(filtered_matches)
