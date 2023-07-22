@@ -90,7 +90,6 @@ class graphRewriteTransformer(Transformer):
         # get the variable name
         variable = arg[2:-2]
         # extract the actual value supplied by the user - can be of any type.
-        print("var: " + variable)
         return self.render_funcs[variable](self.match) 
     
     def value(self, args): 
