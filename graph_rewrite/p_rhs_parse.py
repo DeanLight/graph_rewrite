@@ -71,7 +71,7 @@ rhs_parser = Lark(r"""
     """, parser="lalr", start='patterns' , debug=True)
 
 # %% ../nbs/04_p_rhs_parsing.ipynb 10
-def rhs_to_graph(rhs: str, match: Match, render_funcs: dict[str, RenderFunc]):
+def rhs_to_graph(rhs: str, match: Match = None, render_funcs: dict[str, RenderFunc] = {}):
     """Given an RHS pattern, a match caught by the LHS, and functions that represent the values of the 
     possible placeholders in the pattern, return the directed graph represented by the pattern, 
     with rendered attribute values according to the functions and the match.

@@ -9,6 +9,8 @@ from networkx import DiGraph
 
 from .core import GraphRewriteException, NodeName, EdgeName, _create_graph, _plot_graph
 from .match_class import *
+from .lhs import lhs_to_graph
+from .p_rhs_parse import RenderFunc, p_to_graph, rhs_to_graph
 
 # %% ../nbs/05_rules.ipynb 6
 class MergePolicy:

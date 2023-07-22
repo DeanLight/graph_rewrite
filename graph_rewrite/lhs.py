@@ -240,7 +240,7 @@ class graphRewriteTransformer(Transformer):
         return (G, copy.deepcopy(self.constraints)) 
 
 # %% ../nbs/01_lhs_parsing.ipynb 11
-def lhs_to_graph(lhs: str, condition):
+def lhs_to_graph(lhs: str, condition = None):
     """Given an LHS pattern and a condition function, return the directed graph represented by the pattern, 
     along with an updated condition function that combines the original constraints and the new value and type constraints
     deriving from the pattern.
@@ -277,7 +277,10 @@ def lhs_to_graph(lhs: str, condition):
                         flag = False
 
             # True <=> the match satisfies all the constraints.
-            return flag and condition(match) 
+            if condition == None:
+                return flag
+            else:
+                return flag and condition(match) 
                 
         return final_graph, type_condition
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
