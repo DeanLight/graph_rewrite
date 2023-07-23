@@ -24,7 +24,7 @@ lhs_parser = Lark(r"""
     NAMED_VERTEX: /[a-zA-Z0-9]+/
     ANONYMUS: "_"
     ATTR_NAME: /[a-zA-Z0-9]+/
-    TYPE:  "int" | "string"
+    TYPE:  "int" | "str" | "bool" | "float"
     BOOLEAN: "True" | "False"
     NATURAL_NUMBER: /[1-9][0-9]*/
     INDEX: /[0-9]+/
@@ -273,9 +273,18 @@ def lhs_to_graph(lhs: str, condition = None):
                             flag = False
                     
                     # check type constraint only of value was not checked
-                    elif required_type != None and not isinstance(match[graph_obj][attr_name], required_type):
+                    if required_type == "str":
+                        real_type = str
+                    elif required_type == "float":
+                        real_type = float
+                    elif required_type == "int":
+                        real_type = int
+                    elif required_type == "bool":
+                        real_type = bool
+                    
+                    if required_type != None and not isinstance(match[graph_obj][attr_name], required_type):
                         flag = False
-
+    
             # True <=> the match satisfies all the constraints.
             if condition == None:
                 return flag
