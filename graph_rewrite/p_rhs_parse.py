@@ -103,7 +103,7 @@ def p_to_graph(p: str):
         DiGraph: a networkx graph that is the graph represented by the pattern.
     """
     try:
-        tree = rhs_parser.parse(p)
+        tree = p_parser.parse(p)
         p_graph, _ = graphRewriteTransformer(component="P").transform(tree)                
         return p_graph
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:

@@ -347,9 +347,11 @@ def rewrite(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
                    condition: FilterFunc = lambda match: True,
                    render_rhs: dict[str, RenderFunc] = {},
                    merge_policy = MergePolicy.choose_last,
-                   is_log: bool = True,
+                   is_log: bool = False,
                    is_recursive: bool = False) -> List[Match]:
         
+        _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
+
         # Parse LHS and P (global for all matches)
         lhs_graph, condition = lhs_to_graph(lhs, condition)
         p_graph = p_to_graph(p) if p else None
