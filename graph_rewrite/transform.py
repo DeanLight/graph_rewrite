@@ -16,7 +16,7 @@ from .p_rhs_parse import RenderFunc, p_to_graph, rhs_to_graph
 from .rules import Rule, MergePolicy
 
 # %% ../nbs/06_transform.ipynb 6
-_exceptions = {
+_exception_msgs = {
     "no_such_node": lambda node: f"Node {node} does not exist in the input graph.",
     "no_such_edge": lambda edge: f"Edge {edge} does not exist in the input graph.",
     "no_such_attr_in_node": lambda attr, node: f"Attribute {attr} does not exist in input graph's node {node}.",
@@ -37,7 +37,7 @@ def _generate_new_node_name(graph: DiGraph, base_name: NodeName) -> NodeName:
 # %% ../nbs/06_transform.ipynb 8
 def _clone_node(graph: DiGraph, node_to_clone: NodeName) -> NodeName:
     if node_to_clone not in graph.nodes:
-        raise GraphRewriteException(_exceptions["no_such_node"](node_to_clone))
+        raise GraphRewriteException(_exception_msgs["no_such_node"](node_to_clone))
 
     # Create a new node name
     clone_name = _generate_new_node_name(graph, node_to_clone)
@@ -62,42 +62,42 @@ def _clone_node(graph: DiGraph, node_to_clone: NodeName) -> NodeName:
 # %% ../nbs/06_transform.ipynb 9
 def _remove_node(graph: DiGraph, node_to_remove: NodeName):
     if node_to_remove not in graph.nodes():
-        raise GraphRewriteException(_exceptions["no_such_node"](node_to_remove))
+        raise GraphRewriteException(_exception_msgs["no_such_node"](node_to_remove))
     graph.remove_node(node_to_remove)
 
 # %% ../nbs/06_transform.ipynb 10
 def _remove_edge(graph: DiGraph, edge_to_remove: EdgeName):
     if edge_to_remove not in graph.edges():
-        raise GraphRewriteException(_exceptions["no_such_edge"](edge_to_remove))
+        raise GraphRewriteException(_exception_msgs["no_such_edge"](edge_to_remove))
     graph.remove_edge(*edge_to_remove)
 
 # %% ../nbs/06_transform.ipynb 11
 def _remove_node_attrs(graph: DiGraph, node: NodeName, attrs_to_remove: set):
     if node not in graph.nodes():
-        raise GraphRewriteException(_exceptions["no_such_node"](node))
+        raise GraphRewriteException(_exception_msgs["no_such_node"](node))
     for attr in attrs_to_remove:
         if attr not in graph.nodes[node]:
-            raise GraphRewriteException(_exceptions["no_such_attr_in_node"](attr, node))
+            raise GraphRewriteException(_exception_msgs["no_such_attr_in_node"](attr, node))
         del graph.nodes[node][attr]
 
 # %% ../nbs/06_transform.ipynb 12
 def _remove_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_remove: set):
     if edge not in graph.edges():
-        raise GraphRewriteException(_exceptions["no_such_edge"](edge))
+        raise GraphRewriteException(_exception_msgs["no_such_edge"](edge))
     for attr in attrs_to_remove:
         if attr not in graph.edges[edge]:
-            raise GraphRewriteException(_exceptions["no_such_attr_in_edge"](attr, edge))
+            raise GraphRewriteException(_exception_msgs["no_such_attr_in_edge"](attr, edge))
         del graph.edges[edge][attr]
 
 # %% ../nbs/06_transform.ipynb 13
 def _merge_nodes(graph: DiGraph, nodes_to_merge: set[NodeName], merge_policy) -> NodeName:
     if len(nodes_to_merge) < 1:
-        raise GraphRewriteException(_exceptions["not_enough_to_merge"]())
+        raise GraphRewriteException(_exception_msgs["not_enough_to_merge"]())
     elif len(nodes_to_merge) == 1:
         return list(nodes_to_merge)[0]
     for node_to_merge in nodes_to_merge:
         if node_to_merge not in graph.nodes:
-            raise GraphRewriteException(_exceptions["no_such_node"](node_to_merge))
+            raise GraphRewriteException(_exception_msgs["no_such_node"](node_to_merge))
 
     merged_node_name = _generate_new_node_name(graph, "&".join(nodes_to_merge))
     
@@ -177,25 +177,25 @@ def _add_node(graph: DiGraph, node_to_add: NodeName) -> NodeName:
 def _add_edge(graph: DiGraph, edge_to_add: EdgeName):
     src, target = edge_to_add
     if src not in graph.nodes():
-        raise GraphRewriteException(_exceptions["no_such_node"](src))
+        raise GraphRewriteException(_exception_msgs["no_such_node"](src))
     elif target not in graph.nodes():
-        raise GraphRewriteException(_exceptions["no_such_node"](target))
+        raise GraphRewriteException(_exception_msgs["no_such_node"](target))
     elif edge_to_add in graph.edges():
-        raise GraphRewriteException(_exceptions["edge_exists"](edge_to_add))
+        raise GraphRewriteException(_exception_msgs["edge_exists"](edge_to_add))
     else:
         graph.add_edge(src, target)
 
 # %% ../nbs/06_transform.ipynb 16
 def _add_node_attrs(graph: DiGraph, node: NodeName, attrs_to_add: dict):
     if node not in graph.nodes():
-        raise GraphRewriteException(_exceptions["no_such_node"](node))
+        raise GraphRewriteException(_exception_msgs["no_such_node"](node))
     for attr, val in attrs_to_add.items():
         graph.nodes[node][attr] = val
 
 # %% ../nbs/06_transform.ipynb 17
 def _add_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_add: dict):
     if edge not in graph.edges():
-        raise GraphRewriteException(_exceptions["no_such_edge"](edge))
+        raise GraphRewriteException(_exception_msgs["no_such_edge"](edge))
     for attr, val in attrs_to_add.items():
         graph.edges[edge][attr] = val
 
@@ -341,28 +341,36 @@ def _rewrite_match(input_graph: DiGraph, match: Match,
         _restore_graph(input_graph, saved_graph)
         raise e
 
-
 # %% ../nbs/06_transform.ipynb 26
 def rewrite(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
                    condition: FilterFunc = lambda match: True,
                    render_rhs: dict[str, RenderFunc] = {},
                    merge_policy = MergePolicy.choose_last,
                    is_log: bool = False,
-                   is_recursive: bool = False) -> List[Match]:
+                   is_recursive: bool = False,
+                   is_lazy: bool = False) -> List[Match]:
         
         _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
 
         # Parse LHS and P (global for all matches)
         lhs_graph, condition = lhs_to_graph(lhs, condition)
         p_graph = p_to_graph(p) if p else None
+        if not is_lazy:
+            matches = []
         
         if is_recursive:
-            while True:
+            next_match = next(find_matches(input_graph, lhs_graph, condition=condition))
+            while next_match:
+                new_res = _rewrite_match(input_graph, next_match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
+                if is_lazy:
+                    yield new_res
+                else:
+                    matches.append(new_res)
                 next_match = next(find_matches(input_graph, lhs_graph, condition=condition))
-                if not next_match:
-                    _log("No more matches.", is_log, _GREEN)
-                    break
-                yield _rewrite_match(input_graph, next_match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
+
+            _log("No more matches.", is_log, _GREEN)
+            if not is_lazy:
+                return matches
 
         else:
             # Create a duplication of the graph to find matches lazily (actual graph changes between matches)
@@ -370,4 +378,10 @@ def rewrite(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
 
             # Find matches lazily and transform
             for match in find_matches(copy_input_graph, lhs_graph, condition=condition):
-                yield _rewrite_match(input_graph, match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
+                new_res = _rewrite_match(input_graph, match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
+                if is_lazy:
+                    yield new_res
+                else:
+                    matches.append(new_res)
+            if not is_lazy:
+                return matches
