@@ -17,7 +17,7 @@ class MergePolicy:
     """Static class for policies for solving conflicts when merging nodes with shared attributes.
     """
     @staticmethod
-    def _merge_wrapper(dict1: dict, dict2: dict, collision_policy: Callable[[Any, Any], Any]) -> dict:
+    def _merge_dicts(dict1: dict, dict2: dict, collision_policy: Callable[[Any, Any], Any]) -> dict:
         """A generic dictionary merger, which solves conflicts with a given collision policy.
 
         Args:
@@ -50,7 +50,7 @@ class MergePolicy:
         Returns:
             dict: The merged dictionary
         """
-        return MergePolicy._merge_wrapper(dict1, dict2, lambda v1, v2: v2)
+        return MergePolicy._merge_dicts(dict1, dict2, lambda v1, v2: v2)
     
     @staticmethod
     def union(dict1: dict, dict2: dict) -> dict:
@@ -63,11 +63,11 @@ class MergePolicy:
         Returns:
             dict: The merged dictionary.
         """
-        return MergePolicy._merge_wrapper(dict1, dict2, 
+        return MergePolicy._merge_dicts(dict1, dict2, 
                                            lambda v1, v2: [v1, v2])
 
 # %% ../nbs/05_rules.ipynb 8
-_exceptions = {
+_exception_msgs = {
     "clone_non_existing": lambda p_node, lhs_node: f"Node {p_node} clones an non-existing node {lhs_node}.",
     "clone_illegal_id": lambda p_node, copy_num: f"Node {p_node} clone id {copy_num} is illegal.",
     "p_bad_format": lambda p_node: f"Node {p_node} has a bad formatted name.",
@@ -85,7 +85,7 @@ _exceptions = {
 
 # %% ../nbs/05_rules.ipynb 9
 class Rule:
-    global _exceptions
+    global _exception_msgs
     """A transformation rule, defined by 1-3 graphs:
     - LHS - defines the pattern to search for in the graph.
     - P - defines what parts to preserve (and also defines clones).
@@ -112,41 +112,52 @@ class Rule:
         Handles cloned nodes.
         """
         for p_node in self.p.nodes():
+            # If the p_node contains the cloning symbol, then it's a clone. Extract the clone it denotes (if any)
             if self._clone_sym in str(p_node):
                 if len(str(p_node).split(self._clone_sym)) == 2:
                     lhs_node, copy_num = str(p_node).split(self._clone_sym)
+                    # Clones must have the format "{node}*{copy_num}" where node is in LHS, copy_num is a number
                     if lhs_node not in self.lhs.nodes():
-                        raise GraphRewriteException(_exceptions["clone_non_existing"](p_node, lhs_node))
+                        raise GraphRewriteException(_exception_msgs["clone_non_existing"](p_node, lhs_node))
                     elif not copy_num.isnumeric():
-                        raise GraphRewriteException(_exceptions["clone_illegal_id"](p_node, copy_num))
+                        raise GraphRewriteException(_exception_msgs["clone_illegal_id"](p_node, copy_num))
                     else:
+                        # Map the clone p node to the cloned lhs node
                         self._p_to_lhs[p_node] = lhs_node
+                # Clones must have the format "{node}*{copy_num}"
                 else:
-                    raise GraphRewriteException(_exceptions["p_bad_format"](p_node))
+                    raise GraphRewriteException(_exception_msgs["p_bad_format"](p_node))
+            # Else, p_node is a preservation of an lhs_node with the same name
             elif p_node in self.lhs.nodes():
                 self._p_to_lhs[p_node] = p_node
+            # If it's neither, then the p_node is illegal (does not preserve / clone)
             else:
-                raise GraphRewriteException(_exceptions["p_not_in_lhs"](p_node))
+                raise GraphRewriteException(_exception_msgs["p_not_in_lhs"](p_node))
 
     def _create_p_rhs_hom(self):
         """Construct the homomorphism from P to RHS based on the rule.
         Handles merged nodes.
         """
         for rhs_node in self.rhs.nodes():
+            # If the rhs_node has the merging symbol, then it's a merge. Extract the P nodes it merges (if any)
             if self._merge_sym in str(rhs_node):
+                # Merged node must have the format "{}&{}&...&{}" where each argument is a P node
                 if len(str(rhs_node).split(self._merge_sym)) > 1:
                     p_nodes = str(rhs_node).split(self._merge_sym)
+                    # Check that the merge refrences only existing p nodes
                     if all([p_node in self.p.nodes() for p_node in p_nodes]):
+                        # If so, map each p_node to the new merged rhs node
                         for p_node in p_nodes:
                             self._p_to_rhs[p_node] = rhs_node
                     else:
-                        raise GraphRewriteException(_exceptions["rhs_illegal_name"](rhs_node))
+                        raise GraphRewriteException(_exception_msgs["rhs_illegal_name"](rhs_node))
         for p_node in self.p.nodes():
+            # Every node in P must be mapped to its preserved RHS node, or to the node that merges it (this case is already handled at this point)
             if p_node not in self._p_to_rhs.keys():
                 if p_node in self.rhs.nodes():
                     self._p_to_rhs[p_node] = p_node
                 else:
-                    raise GraphRewriteException(_exceptions["rhs_not_in_p"](p_node))
+                    raise GraphRewriteException(_exception_msgs["rhs_not_in_p"](p_node))
 
     def _reversed_dictionary(self, dictionary: dict) -> dict[Any, set]:
         """Given a dictionary, return a dictionary which maps every
@@ -168,19 +179,6 @@ class Rule:
                 rev_dict[value] = set()
             rev_dict[value].add(key)
         return rev_dict
-
-    def _get_value_safe(self, dictionary: dict[Any, set], key) -> set:
-        """A wrapper for accessing a key in a dictionary, which returns an empty set if the key
-        does not exist (useful for our purposes).
-
-        Args:
-            dictionary (dict[Any, set]): A dictionary
-            key (_type_): A key to access
-
-        Returns:
-            set: The set mapped by the key in the dictionary, or an empty set if the key does not exist in the dictionary.
-        """
-        return dictionary[key] if key in dictionary else set()
 
     def _dict_difference(self, target: dict, other: dict) -> dict:
         """Given two dictionaries, create a new dictionary which "subtracts" the other dictionary from the target one:
@@ -209,28 +207,28 @@ class Rule:
         # Nodes in P do NOT add attributes that aren't in the corresponding LHS node(s).
         for node_lhs in self.lhs.nodes():
             lhs_attrs = set(self.lhs.nodes(data=True)[node_lhs].keys())
-            p_copies = self._get_value_safe(self._rev_p_lhs, node_lhs)
+            p_copies = self._rev_p_lhs.get(node_lhs, set())
             for node_p in p_copies:
                 p_attrs = set(self.p.nodes(data=True)[node_p].keys())
                 if not p_attrs.issubset(lhs_attrs):
-                    raise GraphRewriteException(_exceptions["add_attrs_in_p_node"](node_p))
+                    raise GraphRewriteException(_exception_msgs["add_attrs_in_p_node"](node_p))
         
         # Edges in P do NOT add attributes that aren't in the corresponding LHS edge(s).
         for s, t in self.lhs.edges():
             rhs_attrs = set(self.lhs.get_edge_data(s, t).keys())
-            s_copies, t_copies = self._get_value_safe(self._rev_p_lhs, s), self._get_value_safe(self._rev_p_lhs, t)
+            s_copies, t_copies = self._rev_p_lhs.get(s, set()), self._rev_p_lhs.get(t, set())
             for s_copy in s_copies:
                 for t_copy in t_copies:
                     # For each "clone of edge (s, t)" that is in P
                     if (s_copy, t_copy) in self.p.edges():
                         p_attrs = set(self.p.get_edge_data(s_copy, t_copy).keys())
                         if not p_attrs.issubset(rhs_attrs):
-                            raise GraphRewriteException(_exceptions["add_attrs_in_p_edge"](s_copy, t_copy))
+                            raise GraphRewriteException(_exception_msgs["add_attrs_in_p_edge"](s_copy, t_copy))
                         
         # Edges in P must have a corresponding LHS edge
         for p_s, p_t in self.p.edges():
             if (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.lhs.edges():
-                raise GraphRewriteException(_exceptions["p_edge_not_in_lhs"](p_s, p_t))
+                raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
 
     def _validate_rhs_p(self):
         """Validates the RHS->P homomorphism, and raises appropriate exceptions if it's invalid.
@@ -241,24 +239,24 @@ class Rule:
         for node_rhs in self.rhs.nodes():
             if node_rhs not in self.nodes_to_merge().keys():
                 rhs_attrs = set(self.rhs.nodes(data=True)[node_rhs].keys())
-                p_origins = self._get_value_safe(self._rev_p_rhs, node_rhs)
+                p_origins = self._rev_p_rhs.get(node_rhs, set())
                 for node_p in p_origins:
                     p_attrs = set(self.p.nodes(data=True)[node_p].keys())
                     if not p_attrs.issubset(rhs_attrs):
-                        raise GraphRewriteException(_exceptions["remove_attrs_in_rhs_node"](node_rhs))
+                        raise GraphRewriteException(_exception_msgs["remove_attrs_in_rhs_node"](node_rhs))
         
         # Edges in RHS do NOT remove attributes that are in the corresponding P edge(s).
         # Note that we ignore edges created by a merge here (they follow this rule automatically).
         for s, t in self.rhs.edges():
             if s not in self.nodes_to_merge().keys() and t not in self.nodes_to_merge().keys():
                 rhs_attrs = set(self.rhs.get_edge_data(s, t).keys())
-                s_origins, t_origins = self._get_value_safe(self._rev_p_rhs, s), self._get_value_safe(self._rev_p_rhs, t)
+                s_origins, t_origins = self._rev_p_rhs.get(s, set()), self._rev_p_rhs.get(t, set())
                 for s_origin in s_origins:
                     for t_origin in t_origins:
                         if (s_origin, t_origin) in self.p.edges():
                             origin_attrs = set(self.p.get_edge_data(s_origin, t_origin).keys())
                             if not origin_attrs.issubset(rhs_attrs):
-                                raise GraphRewriteException(_exceptions["remove_attrs_in_rhs_edge"](s,t))
+                                raise GraphRewriteException(_exception_msgs["remove_attrs_in_rhs_edge"](s,t))
 
     def _validate_rule(self):
         """Validates the rule - that is, checking that the homomorphisms are valid, and that clones mentioned in the rule
@@ -272,12 +270,12 @@ class Rule:
         # validate cloned nodes in P have no attributes mentioned (all attributes are copied automatically)
         for clone in clones:
             if self.p.nodes(data=True)[clone] != {}:
-                raise GraphRewriteException(_exceptions["attrs_in_cloned_node"](clone))
+                raise GraphRewriteException(_exception_msgs["attrs_in_cloned_node"](clone))
         
         # validate cloned edges in P (edges with cloned endpoint) have no attributes mentioned
         for s, t, attrs in self.p.edges(data=True):
             if (s in clones or t in clones) and attrs != {}:
-                raise GraphRewriteException(_exceptions["attrs_in_cloned_edge"](s, t))
+                raise GraphRewriteException(_exception_msgs["attrs_in_cloned_edge"](s, t))
 
     def _merge_node_attrs(self, rhs_node: NodeName, p_origins: list[NodeName]) -> dict:
         """Given a node in RHS that is a copy / a merge of one or more nodes in P,
@@ -333,7 +331,7 @@ class Rule:
 
         # Find all LHS nodes which are mapped by more than one node in P (in the P->LHS Hom.)
         return {lhs_node: self._rev_p_lhs[lhs_node] for lhs_node in self.lhs.nodes() \
-                            if len(self._get_value_safe(self._rev_p_lhs, lhs_node)) > 1}
+                            if len(self._rev_p_lhs.get(lhs_node, set())) > 1}
 
     def nodes_to_remove(self) -> set[NodeName]:
         """Find all LHS nodes that should be removed.
@@ -343,7 +341,7 @@ class Rule:
         """
 
         # Find all LHS nodes which are not mapped by any node in P (in the P->LHS Hom.)
-        return {lhs_node for lhs_node in self.lhs.nodes() if len(self._get_value_safe(self._rev_p_lhs, lhs_node)) == 0}
+        return {lhs_node for lhs_node in self.lhs.nodes() if len(self._rev_p_lhs.get(lhs_node, set())) == 0}
 
     def edges_to_remove(self) -> set[EdgeName]:
         """Find all P edges that should be removed.
@@ -358,7 +356,7 @@ class Rule:
         for s, t in self.lhs.edges():
             # If one of the edge endpoints was removed, the edge was removed automatically so we skip it here
             if s not in self.nodes_to_remove() and t not in self.nodes_to_remove():
-                s_copies, t_copies = self._get_value_safe(self._rev_p_lhs, s), self._get_value_safe(self._rev_p_lhs, t)
+                s_copies, t_copies = self._rev_p_lhs.get(s, set()), self._rev_p_lhs.get(t, set())
                 for s_copy in s_copies:
                     for t_copy in t_copies:
                         # For each "clone of edge (s,t)" that shouldn't be in P, remove it
@@ -377,7 +375,7 @@ class Rule:
         attrs_to_remove = {}
         for node_lhs in self.lhs.nodes():
             if node_lhs not in self.nodes_to_clone().keys(): # cloned nodes do not remove attrs
-                p_copies = self._get_value_safe(self._rev_p_lhs, node_lhs)
+                p_copies = self._rev_p_lhs.get(node_lhs, set())
                 for node_p in p_copies:
                     # Find all attributes that are in the LHS node but not in the new P node
                     diff_attrs = set(self._dict_difference(
@@ -399,7 +397,7 @@ class Rule:
         """
         attrs_to_remove = {}
         for s, t in self.lhs.edges():
-            s_copies, t_copies = self._get_value_safe(self._rev_p_lhs, s), self._get_value_safe(self._rev_p_lhs, t)
+            s_copies, t_copies = self._rev_p_lhs.get(s, set()), self._rev_p_lhs.get(t, set())
             for s_copy in s_copies:
                 for t_copy in t_copies:
                     # For each "clone of edge (s, t)" that is in P
@@ -424,7 +422,7 @@ class Rule:
 
         # Find all RHS nodes that are mapped by more than one node in P (in the P->RHS Hom.)
         return {rhs_node: self._rev_p_rhs[rhs_node] for rhs_node in self.rhs.nodes() \
-                            if len(self._get_value_safe(self._rev_p_rhs, rhs_node)) > 1}
+                            if len(self._rev_p_rhs.get(rhs_node, set())) > 1}
 
     def nodes_to_add(self) -> set[NodeName]:
         """Find all RHS nodes which should be added.
@@ -436,7 +434,7 @@ class Rule:
         """
 
         # Find all RHS nodes which are not mapped by any node in P (in the P->RHS Hom.)
-        return {rhs_node for rhs_node in self.rhs.nodes() if len(self._get_value_safe(self._rev_p_rhs, rhs_node)) == 0}
+        return {rhs_node for rhs_node in self.rhs.nodes() if len(self._rev_p_rhs.get(rhs_node, set())) == 0}
 
     def edges_to_add(self) -> set[EdgeName]:
         """Find all RHS edges that should be added. 
@@ -452,7 +450,7 @@ class Rule:
             if s in self.nodes_to_add() or t in self.nodes_to_add():
                 edges_to_add.add((s,t)) # surely a new edge
             else:
-                s_origins, t_origins = self._get_value_safe(self._rev_p_rhs, s), self._get_value_safe(self._rev_p_rhs, t)
+                s_origins, t_origins = self._rev_p_rhs.get(s, set()), self._rev_p_rhs.get(t, set())
                 # New edges from existing P nodes
                 if all([(s_origin, t_origin) not in self.p.edges() for s_origin in s_origins for t_origin in t_origins]):
                     edges_to_add.add((s,t))
@@ -472,7 +470,7 @@ class Rule:
                 if len(rhs_attrs) != 0:
                     attrs_to_add[node_rhs] = rhs_attrs
             else:
-                p_origins = self._get_value_safe(self._rev_p_rhs, node_rhs)
+                p_origins = self._rev_p_rhs.get(node_rhs, set())
                 merged_p_attrs = self._merge_node_attrs(node_rhs, p_origins)
                 if len(merged_p_attrs) != 0:
                     attrs_to_add[node_rhs] = merged_p_attrs
@@ -492,7 +490,7 @@ class Rule:
                 if len(rhs_attrs) != 0:
                     attrs_to_add[(s, t)] = rhs_attrs
             else:
-                s_origins, t_origins = self._get_value_safe(self._rev_p_rhs, s), self._get_value_safe(self._rev_p_rhs, t)
+                s_origins, t_origins = self._rev_p_rhs.get(s, set()), self._rev_p_rhs.get(t, set())
                 merged_p_attrs = self._merge_edge_attrs((s, t), s_origins, t_origins)
                 if len(merged_p_attrs) != 0:
                     attrs_to_add[(s, t)] = merged_p_attrs
