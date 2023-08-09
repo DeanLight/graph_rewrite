@@ -98,7 +98,12 @@ class graphRewriteTransformer(Transformer):
     
     def attribute(self, args): 
         # if an optional token was not parsed, None is placed in the parse tree.
-        attr_name, type, value = args
+        # if type and value are not allowed, then None is entered manualy.
+        if self.component == "P": 
+            attr_name = args[0]
+            type, value = None, None
+        else:
+            attr_name, type, value = args
         # pass a tuple of attr_name, required type, required value.
         return (attr_name, type, value)
     
