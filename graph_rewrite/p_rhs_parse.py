@@ -18,8 +18,8 @@ p_parser = Lark(r"""
     %import common.WS -> WS
     %ignore WS
 
-    NAMED_VERTEX: /[a-zA-Z0-9\*]+/
-    ATTR_NAME: /[a-zA-Z0-9]+/
+    NAMED_VERTEX: /[_a-zA-Z0-9\*]+/
+    ATTR_NAME: /[_a-zA-Z0-9]+/
     INDEX: /[0-9]+/
         
     attribute: ATTR_NAME

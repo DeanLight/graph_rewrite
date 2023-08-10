@@ -21,9 +21,9 @@ lhs_parser = Lark(r"""
     %import common.WS -> WS
     %ignore WS
 
-    NAMED_VERTEX: /[a-zA-Z0-9]+/
+    NAMED_VERTEX: /[_a-zA-Z0-9]+/
     ANONYMUS: "_"
-    ATTR_NAME: /[a-zA-Z0-9]+/
+    ATTR_NAME: /[_a-zA-Z0-9]+/
     TYPE:  "int" | "str" | "bool" | "float"
     BOOLEAN: "True" | "False"
     NATURAL_NUMBER: /[1-9][0-9]*/
