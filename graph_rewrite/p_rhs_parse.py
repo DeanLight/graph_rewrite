@@ -4,10 +4,9 @@
 __all__ = ['p_parser', 'rhs_parser', 'rhs_to_graph', 'p_to_graph']
 
 # %% ../nbs/04_p_rhs_parsing.ipynb 4
-import copy
-import networkx as nx
-from lark import Transformer, Lark
+from lark import Lark
 from lark import UnexpectedCharacters, UnexpectedToken
+import networkx as nx
 from .match_class import Match
 from .core import GraphRewriteException
 from .core import _create_graph, _plot_graph, _graphs_equal
@@ -32,8 +31,9 @@ p_parser = Lark(r"""
     vertex: NAMED_VERTEX [attributes]
     | index_vertex [attributes]
 
+    empty:
     pattern: vertex (connection vertex)*
-    patterns: pattern (";" pattern)*
+    patterns: pattern (";" pattern)* | empty
 
     """, parser="lalr", start='patterns' , debug=True)
 
@@ -65,8 +65,9 @@ rhs_parser = Lark(r"""
     vertex: NAMED_VERTEX [attributes]
     | index_vertex [attributes]
 
+    empty:
     pattern: vertex (connection vertex)*
-    patterns: pattern (";" pattern)*
+    patterns: pattern (";" pattern)* | empty
 
     """, parser="lalr", start='patterns' , debug=True)
 

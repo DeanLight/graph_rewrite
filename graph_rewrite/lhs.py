@@ -216,6 +216,9 @@ class graphRewriteTransformer(Transformer):
         G.add_edges_from(edge_list)
         return G
 
+    def empty(self, _):
+        return nx.DiGraph()
+    
     def patterns(self, args):
         g, *graphs = args
         graphs.insert(0,g)
