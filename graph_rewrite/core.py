@@ -47,7 +47,7 @@ plot_consts = {
     # Highlighted nodes can have different colors
     "hl_node_color": 'r',
 
-    "font_size": 10,
+    "font_size": 7,
     "font_color": 'w',
 
     "arrow_size": 10,

@@ -49,11 +49,13 @@ class Match:
         self.mapping: Dict[NodeName, NodeName] = mapping
 
     def __get_node(self, pattern_node):
+        if pattern_node not in self.__nodes:
+            raise GraphRewriteException(f"Node {pattern_node} does not exist in the pattern")
         return self.graph.nodes[self.mapping[pattern_node]]
 
     def __get_edge(self, pattern_src, pattern_dst):
         if (pattern_src, pattern_dst) not in self.__edges:
-            raise GraphRewriteException("Edge does not exist in the pattern")
+            raise GraphRewriteException(f"Edge {(pattern_src, pattern_dst)} does not exist in the pattern")
         return self.graph.edges[self.mapping[pattern_src], self.mapping[pattern_dst]]
 
     def nodes(self):
@@ -61,6 +63,11 @@ class Match:
 
     def edges(self):
         return {convert_to_edge_name(pattern_src, pattern_dest): self.__get_edge(pattern_src, pattern_dest) for (pattern_src, pattern_dest) in self.__edges}
+
+    def __eq__(self, other):
+        if type(other) is Match and len(other.mapping.items()) == len(self.mapping.items()):
+            return all([other.mapping.get(k) == v for k,v in self.mapping.items()])
+        return False
 
     def __getitem__(self, key: Union[NodeName, str]):
         """Returns the node / edge of the input graph, which was mapped by the key in the pattern during matching.
@@ -82,13 +89,13 @@ class Match:
             else:
                 return self.__get_node(key)
         except:
-            raise GraphRewriteException("The symbol does not exist in the pattern, or it was removed from the graph")
+            raise GraphRewriteException(f"The symbol {key} does not exist in the pattern, or it was removed from the graph")
         
     def __str__(self):
         return self.mapping.__str__()
 
 # %% ../nbs/02_match_class.ipynb 18
-def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, NodeName]) -> Match:
+def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, NodeName], filter: bool=True) -> Match:
     """Given a mapping, which denotes a match of the pattern in the input graph,
     create a corresponding instance of the Match class.
 
@@ -97,6 +104,7 @@ def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, N
         pattern (DiGraph): A pattern graph
         mapping (Dict[NodeName, NodeName]): A mapping from nodes in the pattern graph to nodes in the input graph, 
         that denotes a single match between the two.
+        filter (bool, optional): If True, filter anonymous nodes and edges. Defaults to True.
 
     Returns:
         Match: A corresponding instance of the Match class
@@ -105,13 +113,13 @@ def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, N
     cleared_mapping = mapping.copy()
 
     for pattern_node in mapping.keys():
-        if is_anonymous_node(pattern_node):
+        if filter and is_anonymous_node(pattern_node):
             cleared_mapping.pop(pattern_node)
             continue # as we don't want to include this node in the Match
         nodes_list.append(pattern_node)
 
     for (n1, n2) in pattern.edges:
-        if is_anonymous_node(n1) or is_anonymous_node(n2):
+        if filter and (is_anonymous_node(n1) or is_anonymous_node(n2)):
             continue # as before
         edges_list.append((n1, n2))
 

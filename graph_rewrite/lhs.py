@@ -173,13 +173,14 @@ class lhsTransformer(Transformer):
             attribute_names, constraints = edge[0]
             attribute_names.pop("$dup", 0)
             # ignore edge[1] - determinism flag. edge[0] is the tuple of dicts of attributes.
-            edge_list.append((vertices[i][0], vertices[i+1][0], attribute_names)) 
+            vertex_name_pos = 0 # each item in vertices is a tuple (vertex_name, attrs)
+            edge_list.append((vertices[i][vertex_name_pos], vertices[i+1][vertex_name_pos], attribute_names)) 
 
             # add constraints - we assume an edge only appears once in LHS
             filtered_cons = dict(filter(lambda tup: not tup[1] == (None, None), constraints.items()))
             # check if filtered_cons is not empty - there are concrete constraints
             if filtered_cons: 
-                self.constraints[str(vertices[i]) + "->" + str(vertices[i+1])] = filtered_cons
+                self.constraints[str(vertices[i][vertex_name_pos]) + "->" + str(vertices[i+1][vertex_name_pos])] = filtered_cons
 
         # more complex vertion - duplications
         # create a recursive function that adds the vertices and edges, 
