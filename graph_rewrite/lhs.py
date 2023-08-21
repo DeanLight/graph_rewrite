@@ -281,16 +281,10 @@ def lhs_to_graph(lhs: str, condition = None):
                             flag = False
                     
                     # check type constraint only of value was not checked
-                    if required_type == "str":
-                        real_type = str
-                    elif required_type == "float":
-                        real_type = float
-                    elif required_type == "int":
-                        real_type = int
-                    elif required_type == "bool":
-                        real_type = bool
+                    str_to_type = {"str":str, "float":float, "int":int, "bool":bool}
+                    real_type = str_to_type[required_type]
                     
-                    if required_type != None and not isinstance(match[graph_obj][attr_name], required_type):
+                    if required_type != None and not isinstance(match[graph_obj][attr_name], real_type):
                         flag = False
     
             # True <=> the match satisfies all the constraints.

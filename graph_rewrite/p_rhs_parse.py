@@ -51,7 +51,7 @@ rhs_parser = Lark(r"""
     BOOLEAN: "True" | "False"
     NATURAL_NUMBER: /[1-9][0-9]*/
     INDEX: /[0-9]+/
-    USER_VALUE: /\{\{.*\}\}/
+    USER_VALUE: /\{\{[^[\]{};=]*\}\}/
 
     value: FLOAT | INT | BOOLEAN | USER_VALUE | STRING
 
