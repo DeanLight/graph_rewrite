@@ -273,7 +273,7 @@ def lhs_to_graph(lhs: str, condition = None):
             for graph_obj in constraints.keys():
                 obj_constraints = constraints[graph_obj]
                 for attr_name in obj_constraints.keys():
-                    required_type, required_value = obj_constraints[attr_name]
+                    required_type_str, required_value = obj_constraints[attr_name]
 
                     # check value constraint
                     if required_value != None:
@@ -282,9 +282,12 @@ def lhs_to_graph(lhs: str, condition = None):
                     
                     # check type constraint only of value was not checked
                     str_to_type = {"str":str, "float":float, "int":int, "bool":bool}
-                    real_type = str_to_type[required_type]
+                    if not required_type_str == None:
+                        required_type = str_to_type[required_type_str]
+                    else:
+                        required_type = None
                     
-                    if required_type != None and not isinstance(match[graph_obj][attr_name], real_type):
+                    if required_type_str != None and not isinstance(match[graph_obj][attr_name], required_type):
                         flag = False
     
             # True <=> the match satisfies all the constraints.
