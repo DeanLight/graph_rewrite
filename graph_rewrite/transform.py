@@ -574,7 +574,7 @@ def rewrite(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
         lhs (str): A LHS pattern string
         p (str, optional): A P pattern string. Defaults to None.
         rhs (str, optional): A RHS pattern string. Defaults to None.
-        condition (FilterFunc, optional): A condition on the matches. Matches for which the condition doesn't hold aren't rewritten. Defaults to lambdamatch:True.
+        condition (FilterFunc, optional): A condition on the matches. Matches for which the condition doesn't hold aren't rewritten. Defaults to lambda match: True.
         render_rhs (dict[str, RenderFunc], optional): Maps a RHS placeholder to a function that describes how to fill it, based on the given match. Defaults to {}.
         merge_policy (MergePolicy, optional): A policy that dictates how to merge conflicting attributes. Defaults to MergePolicy.choose_last.
         is_log (bool, optional): If True, logs are printed throughout the process. Defaults to False.
