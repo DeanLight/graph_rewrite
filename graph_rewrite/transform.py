@@ -224,7 +224,7 @@ def _setup_merged_node(graph: DiGraph, nodes_to_merge: set[NodeName], merge_poli
 
 # %% ../nbs/06_transform.ipynb 14
 def _merge_nodes(graph: DiGraph, nodes_to_merge: set[NodeName], merge_policy: MergePolicy) -> NodeName:
-    """Merge a set of nodes in the graph. That is, remove all these nodes are replace them with a new node,
+    """Merge a set of nodes in the graph. That is, remove all these nodes and replace them with a new node,
     whose attributes merge the attributes of the original nodes, whose connected edges merge the edges connected to
     the original node, and whose name denotes the nodes which it merges.
 

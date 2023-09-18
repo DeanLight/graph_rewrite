@@ -6,6 +6,8 @@ __all__ = ['NodeName', 'EdgeName', 'plot_consts', 'GraphRewriteException']
 # %% ../nbs/00_core.ipynb 4
 from networkx import DiGraph, planar_layout, spring_layout, draw_networkx_nodes, draw_networkx_labels, draw_networkx_edges
 import matplotlib.pyplot as plt
+import pandas as pd
+from IPython.display import display
 from typing import *
 
 # %% ../nbs/00_core.ipynb 6
@@ -62,13 +64,15 @@ plot_consts = {
 }
 
 # %% ../nbs/00_core.ipynb 15
-def _plot_graph(g: DiGraph, hl_nodes: set[NodeName] = set(), hl_edges: set[EdgeName] = set()):
+def _plot_graph(g: DiGraph, hl_nodes: set[NodeName] = set(), hl_edges: set[EdgeName] = set(), node_attrs: bool = False, edge_attrs: bool = False):
     """Plot a graph, and potentially highlight certain nodes and edges.
 
     Args:
         g (DiGraph): a graph to plot
         hl_nodes (set[NodeName], optional): set of node names to highlight. Defaults to set().
         hl_edges (set[EdgeName], optional): set of edge names to highlight. Defaults to set().
+        node_attrs (bool, optional): If true, print node attributes. Defaults to False.
+        edge_attrs (bool, optional): If true, print edge attributes. Defaults to False.
     """
     global plot_consts
 
@@ -91,6 +95,21 @@ def _plot_graph(g: DiGraph, hl_nodes: set[NodeName] = set(), hl_edges: set[EdgeN
                                 node_size=plot_consts["node_size"], edge_color=plot_consts["edge_color"], width=plot_consts["edge_width"])
             draw_networkx_edges(g, pos, edgelist=hl_edges, arrowsize=plot_consts["arrow_size"], node_size=plot_consts["node_size"],
                                  edge_color=plot_consts["hl_edge_color"], width=plot_consts["hl_edge_width"])
+            
+            if node_attrs:
+                display(pd.DataFrame([[attrs] for _, attrs in g.nodes(data=True)], 
+                                    columns = ['Attributes'], 
+                                    index=[node for node, _ in g.nodes(data=True)])
+                            .style.set_properties(**{'text-align': 'left', 'max_colwidth': None})
+                            .set_table_styles([dict(selector = 'th', props=[('text-align', 'left')])]))
+
+            if edge_attrs:
+                display(pd.DataFrame([[attrs] for _, _, attrs in g.edges(data=True)], 
+                                    columns = ['Attributes'], 
+                                    index=[f'({src}, {dst})' for src, dst, _ in g.edges(data=True)])
+                            .style.set_properties(**{'text-align': 'left', 'max_colwidth': None})
+                            .set_table_styles([dict(selector = 'th', props=[('text-align', 'left')])]))
+            
             return
         except:
             print("Graph isn't planar, priniting in spring layout mode.")
