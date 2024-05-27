@@ -3,7 +3,7 @@
 # %% auto 0
 __all__ = ['lhs_parser', 'RenderFunc', 'cnt', 'graphRewriteTransformer', 'lhs_to_graph']
 
-# %% ../nbs/01_lhs_parsing.ipynb 4
+# %% ../nbs/01_lhs_parsing.ipynb 5
 import copy
 from collections.abc import Callable
 import networkx as nx
@@ -11,9 +11,9 @@ from lark import Transformer, Lark
 from lark import UnexpectedCharacters, UnexpectedToken
 from .match_class import Match
 from .core import GraphRewriteException
-from .core import _create_graph, _plot_graph, _graphs_equal
+from .core import _create_graph,  _graphs_equal
 
-# %% ../nbs/01_lhs_parsing.ipynb 6
+# %% ../nbs/01_lhs_parsing.ipynb 7
 lhs_parser = Lark(r"""
     %import common.INT -> INT 
     %import common.FLOAT -> FLOAT
@@ -51,10 +51,10 @@ lhs_parser = Lark(r"""
 
 # multi_connection: "-" NATURAL_NUMBER "+" [attributes] "->"  - setting for the "-num+->" feature
 
-# %% ../nbs/01_lhs_parsing.ipynb 8
+# %% ../nbs/01_lhs_parsing.ipynb 9
 RenderFunc = Callable[[Match], any] # type of a function to render a parameter
 
-# %% ../nbs/01_lhs_parsing.ipynb 9
+# %% ../nbs/01_lhs_parsing.ipynb 10
 cnt:int = 0 # unique id for anonymous vertices
 class graphRewriteTransformer(Transformer):
     def __init__(self, visit_tokens: bool = True, component: str = "LHS", match: Match = None, render_funcs: dict[str, RenderFunc] = {}) -> None:
@@ -247,7 +247,7 @@ class graphRewriteTransformer(Transformer):
         #sent as a module output and replaces condition.
         return (G, copy.deepcopy(self.constraints)) 
 
-# %% ../nbs/01_lhs_parsing.ipynb 11
+# %% ../nbs/01_lhs_parsing.ipynb 12
 def lhs_to_graph(lhs: str, condition = None):
     """Given an LHS pattern and a condition function, return the directed graph represented by the pattern, 
     along with an updated condition function that combines the original constraints and the new value and type constraints
