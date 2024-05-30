@@ -3,16 +3,16 @@
 # %% auto 0
 __all__ = ['MergePolicy', 'Rule']
 
-# %% ../nbs/05_rules.ipynb 4
+# %% ../nbs/05_rules.ipynb 5
 from typing import *
 from networkx import DiGraph
 
-from .core import GraphRewriteException, NodeName, EdgeName, _create_graph, _plot_graph
+from .core import GraphRewriteException, NodeName, EdgeName, _create_graph, draw
 from .match_class import *
 from .lhs import lhs_to_graph
 from .p_rhs_parse import RenderFunc, p_to_graph, rhs_to_graph
 
-# %% ../nbs/05_rules.ipynb 6
+# %% ../nbs/05_rules.ipynb 7
 class MergePolicy:
     """Static class for policies for solving conflicts when merging nodes with shared attributes.
     """
@@ -66,7 +66,7 @@ class MergePolicy:
         return MergePolicy._merge_dicts(dict1, dict2, 
                                            lambda v1, v2: [v1, v2])
 
-# %% ../nbs/05_rules.ipynb 8
+# %% ../nbs/05_rules.ipynb 9
 _exception_msgs = {
     "clone_non_existing": lambda p_node, lhs_node: f"Node {p_node} clones an non-existing node {lhs_node}.",
     "clone_illegal_id": lambda p_node, copy_num: f"Node {p_node} clone id {copy_num} is illegal.",
@@ -83,7 +83,7 @@ _exception_msgs = {
     "attrs_in_cloned_edge": lambda s_copy, t_copy: f"Cloned edge ({s_copy},{t_copy}) in P should not explicitly mention attributes"
 }
 
-# %% ../nbs/05_rules.ipynb 9
+# %% ../nbs/05_rules.ipynb 10
 class Rule:
     global _exception_msgs
     """A transformation rule, defined by 1-3 graphs:

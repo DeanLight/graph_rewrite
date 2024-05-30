@@ -3,16 +3,16 @@
 # %% auto 0
 __all__ = ['p_parser', 'rhs_parser', 'rhs_to_graph', 'p_to_graph']
 
-# %% ../nbs/04_p_rhs_parsing.ipynb 4
+# %% ../nbs/04_p_rhs_parsing.ipynb 5
 from lark import Lark
 from lark import UnexpectedCharacters, UnexpectedToken
 import networkx as nx
-from .match_class import Match
+from .match_class import Match,draw_match
 from .core import GraphRewriteException
-from .core import _create_graph, _plot_graph, _graphs_equal
+from .core import _create_graph, draw, _graphs_equal
 from .lhs import RenderFunc, graphRewriteTransformer
 
-# %% ../nbs/04_p_rhs_parsing.ipynb 6
+# %% ../nbs/04_p_rhs_parsing.ipynb 7
 p_parser = Lark(r"""
     %import common.WS -> WS
     %ignore WS
@@ -37,7 +37,7 @@ p_parser = Lark(r"""
 
     """, parser="lalr", start='patterns' , debug=True)
 
-# %% ../nbs/04_p_rhs_parsing.ipynb 8
+# %% ../nbs/04_p_rhs_parsing.ipynb 9
 rhs_parser = Lark(r"""
     %import common.INT -> INT 
     %import common.FLOAT -> FLOAT
@@ -71,7 +71,7 @@ rhs_parser = Lark(r"""
 
     """, parser="lalr", start='patterns' , debug=True)
 
-# %% ../nbs/04_p_rhs_parsing.ipynb 10
+# %% ../nbs/04_p_rhs_parsing.ipynb 11
 def rhs_to_graph(rhs: str, match: Match = None, render_funcs: dict[str, RenderFunc] = {}):
     """Given an RHS pattern, a match caught by the LHS, and functions that represent the values of the 
     possible placeholders in the pattern, return the directed graph represented by the pattern, 
@@ -93,7 +93,7 @@ def rhs_to_graph(rhs: str, match: Match = None, render_funcs: dict[str, RenderFu
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
         raise GraphRewriteException('Unable to convert RHS: {}'.format(e))
 
-# %% ../nbs/04_p_rhs_parsing.ipynb 11
+# %% ../nbs/04_p_rhs_parsing.ipynb 12
 def p_to_graph(p: str):
     """Given an P pattern, return the directed graph represented by the pattern.
 
