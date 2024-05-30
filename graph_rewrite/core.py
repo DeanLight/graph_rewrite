@@ -271,6 +271,9 @@ linkStyle default {{default_edge_style}}
 
 """
 
+def _change_double_quotes(s):
+    return str(s).replace('"',"'")
+
 def draw(g:nx.DiGraph,props=None,ret_mermaid=False,
          default_node_style=None,
          default_edge_style=None,
@@ -287,9 +290,11 @@ def draw(g:nx.DiGraph,props=None,ret_mermaid=False,
     def get_node_description(node,data):
         label = data.pop('label',None)
         if props is None:
-            attrs = ', '.join([f'{k}={v}' for k,v in data.items()])
-        else :
-            attrs = ', '.join([f'{k}={v}' for k,v in data.items() if k in props])
+            keys = data.keys()
+        else:
+            keys = props
+        
+        attrs = ', '.join([f'{k}={_change_double_quotes(v)}' for k,v in data.items() if k in keys])
         if label is None:
             return f'{node}\n{attrs}'
         else:
@@ -297,11 +302,11 @@ def draw(g:nx.DiGraph,props=None,ret_mermaid=False,
     
     def get_edge_description(data):
         if props is None:
-            attrs = ', '.join([f'{k}={v}' for k,v in data.items()])
-        else :
-            attrs = ', '.join([f'{k}={v}' for k,v in data.items() if k in props])
-
-        return f'{attrs}'
+            keys = data.keys()
+        else:
+            keys = props
+        attrs = ', '.join([f'{k}={_change_double_quotes(v)}' for k,v in data.items() if k in keys])
+        return fr'{attrs}'
 
     nodes = [(i,n, get_node_description(n,data),node_styles.get(n,None)) 
              for i,(n,data) in enumerate(g.nodes(data=True))]
