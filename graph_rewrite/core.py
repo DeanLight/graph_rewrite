@@ -241,7 +241,7 @@ def mm_path(path):
 
 # %% ../nbs/00_core.ipynb 26
 graph_template = """
-flowchart TB
+flowchart {{direction}}
 {% for i,name,desc,style in nodes -%}
 {{name}}["{{desc}}"]
 {% if style -%}
@@ -272,13 +272,14 @@ linkStyle default {{default_edge_style}}
 """
 
 def _change_double_quotes(s):
-    return str(s).replace('"',"'")
+    return repr(s).replace('"',"'")
 
 def draw(g:nx.DiGraph,props=None,ret_mermaid=False,
          default_node_style=None,
          default_edge_style=None,
          node_styles=None,
-         edge_styles=None):
+         edge_styles=None,
+         direction='TB'):
     global graph_template
     # so we dont change the original graph
     g = g.copy()
@@ -306,7 +307,7 @@ def draw(g:nx.DiGraph,props=None,ret_mermaid=False,
         else:
             keys = props
         attrs = ', '.join([f'{k}={_change_double_quotes(v)}' for k,v in data.items() if k in keys])
-        return fr'{attrs}'
+        return f'{attrs}'
 
     nodes = [(i,n, get_node_description(n,data),node_styles.get(n,None)) 
              for i,(n,data) in enumerate(g.nodes(data=True))]
@@ -315,8 +316,10 @@ def draw(g:nx.DiGraph,props=None,ret_mermaid=False,
 
     mermaid_text = render_jinja(graph_template,{'nodes':nodes,'edges':edges,
                                                 'default_node_style':default_node_style,
-                                                'default_edge_style':default_edge_style, 
+                                                'default_edge_style':default_edge_style,
+                                                'direction':direction,
                                                 })
+                                                
     if ret_mermaid:
         print(mermaid_text)
         #return mermaid_text
