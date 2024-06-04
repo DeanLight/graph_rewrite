@@ -10,7 +10,7 @@ from pathlib import Path
 import networkx as nx
 from networkx import DiGraph, planar_layout, spring_layout, draw_networkx_nodes, draw_networkx_labels, draw_networkx_edges
 
-import matplotlib.pyplot as plt
+import html
 import pandas as pd
 
 from IPython.display import display
@@ -241,7 +241,7 @@ def mm_path(path):
 
 # %% ../nbs/00_core.ipynb 26
 graph_template = """
-flowchart TB
+flowchart {{direction}}
 {% for i,name,desc,style in nodes -%}
 {{name}}["{{desc}}"]
 {% if style -%}
@@ -271,14 +271,40 @@ linkStyle default {{default_edge_style}}
 
 """
 
-def _change_double_quotes(s):
-    return str(s).replace('"',"'")
+def _escaped_html_format(s):
+    s = repr(s)
+    s = s.replace('\'','#quot;').replace('\"','#quot;')
+    s = html.escape(s)
+    s = s.replace('&#','#').replace('&','#')
+    return s
+
+def _get_node_description(node,data,props=None):
+    label = data.pop('label',None)
+    if props is None:
+        keys = data.keys()
+    else:
+        keys = props
+    
+    attrs = ', '.join([f'{k}={_escaped_html_format(v)}' for k,v in data.items() if k in keys])
+    if label is None:
+        return f'{node}\n{attrs}'
+    else:
+        return f'{node}({label})\n{attrs}'
+
+def _get_edge_description(data,props=None):
+    if props is None:
+        keys = data.keys()
+    else:
+        keys = props
+    attrs = ', '.join([f'{k}={_escaped_html_format(v)}' for k,v in data.items() if k in keys])
+    return f'{attrs}'
 
 def draw(g:nx.DiGraph,props=None,ret_mermaid=False,
          default_node_style=None,
          default_edge_style=None,
          node_styles=None,
-         edge_styles=None):
+         edge_styles=None,
+         direction='TB'):
     global graph_template
     # so we dont change the original graph
     g = g.copy()
@@ -287,36 +313,19 @@ def draw(g:nx.DiGraph,props=None,ret_mermaid=False,
     if edge_styles is None:
         edge_styles = {}
 
-    def get_node_description(node,data):
-        label = data.pop('label',None)
-        if props is None:
-            keys = data.keys()
-        else:
-            keys = props
-        
-        attrs = ', '.join([f'{k}={_change_double_quotes(v)}' for k,v in data.items() if k in keys])
-        if label is None:
-            return f'{node}\n{attrs}'
-        else:
-            return f'{node}({label})\n{attrs}'
-    
-    def get_edge_description(data):
-        if props is None:
-            keys = data.keys()
-        else:
-            keys = props
-        attrs = ', '.join([f'{k}={_change_double_quotes(v)}' for k,v in data.items() if k in keys])
-        return fr'{attrs}'
 
-    nodes = [(i,n, get_node_description(n,data),node_styles.get(n,None)) 
+
+    nodes = [(i,n, _get_node_description(n,data,props),node_styles.get(n,None)) 
              for i,(n,data) in enumerate(g.nodes(data=True))]
-    edges = [(i,u,v,get_edge_description(data),edge_styles.get((u,v),None)) 
+    edges = [(i,u,v,_get_edge_description(data,props),edge_styles.get((u,v),None)) 
              for i,(u,v,data) in enumerate(g.edges(data=True))]
 
     mermaid_text = render_jinja(graph_template,{'nodes':nodes,'edges':edges,
                                                 'default_node_style':default_node_style,
-                                                'default_edge_style':default_edge_style, 
+                                                'default_edge_style':default_edge_style,
+                                                'direction':direction,
                                                 })
+                                                
     if ret_mermaid:
         print(mermaid_text)
         #return mermaid_text

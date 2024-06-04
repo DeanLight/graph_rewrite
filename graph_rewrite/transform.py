@@ -604,8 +604,8 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
                 next_match = next(find_matches(input_graph, lhs_graph, condition=condition))
                 if display_matches:
                     draw_match(input_graph, next_match)
+                yield next_match
                 new_res = _rewrite_match(input_graph, next_match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
-                yield new_res
             except StopIteration:
                 break
 
@@ -616,12 +616,13 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
         copy_input_graph = _copy_graph(input_graph)
 
         # Find matches lazily and transform
-        new_res = copy_input_graph
         for match in find_matches(copy_input_graph, lhs_graph, condition=condition):
             if display_matches:
                 draw_match(input_graph, match)
+            # the match object points to the copy graph, so we need to move it to the original graph for imperative changes
+            match.set_graph(input_graph)
+            yield match
             new_res = _rewrite_match(input_graph, match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
-            yield new_res
 
 
 # %% ../nbs/06_transform.ipynb 31

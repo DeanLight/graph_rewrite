@@ -64,6 +64,9 @@ class Match:
     def edges(self):
         return {convert_to_edge_name(pattern_src, pattern_dest): self.__get_edge(pattern_src, pattern_dest) for (pattern_src, pattern_dest) in self._edges}
 
+    def set_graph(self, graph: DiGraph):
+        self.graph = graph
+
     def __eq__(self, other):
         if type(other) is Match and len(other.mapping.items()) == len(self.mapping.items()):
             return all([other.mapping.get(k) == v for k,v in self.mapping.items()])
