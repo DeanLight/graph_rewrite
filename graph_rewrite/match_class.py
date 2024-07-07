@@ -46,7 +46,9 @@ class Match:
         self.graph: DiGraph = graph
         self._nodes: List[NodeName] = nodes
         self._edges: List[EdgeName] = edges
+        # self._collections: List[CollectionName] = List() # Collections Feature
         self.mapping: Dict[NodeName, NodeName] = mapping
+        # self.collection_mapping: Dict[CollectionName, Collections] = Dict() # Collections Feature
 
     def __get_node(self, pattern_node):
         if pattern_node not in self._nodes:
@@ -57,6 +59,15 @@ class Match:
         if (pattern_src, pattern_dst) not in self._edges:
             raise GraphRewriteException(f"Edge {(pattern_src, pattern_dst)} does not exist in the pattern")
         return self.graph.edges[self.mapping[pattern_src], self.mapping[pattern_dst]]
+    
+    def __get_collection(self, pattern): # Collections feature
+        pass
+    # TODO: get the collection.
+    '''
+    if pattern not in self._collections:
+            raise GraphRewriteException(f"Collection {pattern}} does not exist in the pattern")
+        return self.collection_mapping[pattern]
+    '''
 
     def nodes(self):
         return {pattern_node: self.__get_node(pattern_node) for pattern_node in self._nodes}
@@ -89,8 +100,23 @@ class Match:
             if str(key).__contains__("->") and len(str(key).split("->")) == 2:
                 end_nodes = str(key).split("->")
                 return self.__get_edge(end_nodes[0], end_nodes[1])
+                #TODO: add a check of whether it's an edge or an edge collection # Collections Feature
+                '''
+                if key in self._edges:
+                    end_nodes = str(key).split("->")
+                    return self.__get_edge(end_nodes[0], end_nodes[1])
+                else:
+                    return self.__get_collection(key)
+                '''
             else:
                 return self.__get_node(key)
+                #TODO: add a check of whether it's an edge or an edge collection # Collections Feature
+                '''
+                if key in self._nodes:
+                    return self.__get_node(key)
+                else:
+                    return self.__get_collection(key)
+                '''
         except:
             raise GraphRewriteException(f"The symbol {key} does not exist in the pattern, or it was removed from the graph")
         

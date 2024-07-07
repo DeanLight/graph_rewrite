@@ -91,10 +91,12 @@ class Rule:
     - P - defines what parts to preserve (and also defines clones).
     - RHS - defines what parts to add (and also defines merges).
     """
+    # TODO: add collections_mapping member of the class # Collections Feature
     def __init__(self, lhs: DiGraph, p: DiGraph = None, rhs: DiGraph = None, merge_policy = MergePolicy.choose_last):
         self.lhs = lhs
         self.p = p if p else self.lhs.copy()
         self.rhs = rhs if rhs else self.p.copy()
+        #self.collection_mapping = collection_mapping
         self.merge_policy = merge_policy
 
         self._p_to_lhs, self._p_to_rhs = {}, {}
@@ -130,6 +132,7 @@ class Rule:
             # Else, p_node is a preservation of an lhs_node with the same name
             elif p_node in self.lhs.nodes():
                 self._p_to_lhs[p_node] = p_node
+            # TODO: map a collection node in p to lhs # Collections Feature
             # If it's neither, then the p_node is illegal (does not preserve / clone)
             else:
                 raise GraphRewriteException(_exception_msgs["p_not_in_lhs"](p_node))
@@ -225,10 +228,12 @@ class Rule:
                         if not p_attrs.issubset(rhs_attrs):
                             raise GraphRewriteException(_exception_msgs["add_attrs_in_p_edge"](s_copy, t_copy))
                         
-        # Edges in P must have a corresponding LHS edge
+        # Edges in P must have a corresponding LHS edge #TODO: or a corresponding edge collection # Collections Featue
         for p_s, p_t in self.p.edges():
             if (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.lhs.edges():
                 raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
+        
+        #TODO: Add checks that nodes and edges do not add attributes for collections # Collections feature
 
     def _validate_rhs_p(self):
         """Validates the RHS->P homomorphism, and raises appropriate exceptions if it's invalid.
@@ -332,6 +337,9 @@ class Rule:
         # Find all LHS nodes which are mapped by more than one node in P (in the P->LHS Hom.)
         return {lhs_node: self._rev_p_lhs[lhs_node] for lhs_node in self.lhs.nodes() \
                             if len(self._rev_p_lhs.get(lhs_node, set())) > 1}
+        # TODO: also add node Collections to clone to the set # Collections Feature
+        # pass over each collection to clone and add all of its nodes
+
 
     def nodes_to_remove(self) -> set[NodeName]:
         """Find all LHS nodes that should be removed.
@@ -342,6 +350,8 @@ class Rule:
 
         # Find all LHS nodes which are not mapped by any node in P (in the P->LHS Hom.)
         return {lhs_node for lhs_node in self.lhs.nodes() if len(self._rev_p_lhs.get(lhs_node, set())) == 0}
+        # TODO: also add node Collections to remove to the set # Collections Feature
+        # pass over each collection to remove and add all of its nodes
 
     def edges_to_remove(self) -> set[EdgeName]:
         """Find all P edges that should be removed.
@@ -362,6 +372,8 @@ class Rule:
                         # For each "clone of edge (s,t)" that shouldn't be in P, remove it
                         if (s_copy, t_copy) not in self.p.edges():
                             edges_to_remove.add((s_copy, t_copy))
+        # TODO: also add edge Collections to remove to the set # Collections Feature
+                # pass over each collection to remove and add all of its edges
         return edges_to_remove
 
     def node_attrs_to_remove(self) -> dict[NodeName, set]:
@@ -385,6 +397,8 @@ class Rule:
                     if len(diff_attrs) != 0:
                         # Remove all such attributes from the P node
                         attrs_to_remove[node_p] = diff_attrs
+        # TODO: also add node Collections attributes to remove to the set # Collections Feature
+        # pass over each collection to remove attributes and add all of its attributes with the corresponding node
         return attrs_to_remove
 
     def edge_attrs_to_remove(self) -> dict[EdgeName, set]:
@@ -409,6 +423,8 @@ class Rule:
                         if len(diff_attrs) != 0:
                             # Remove all such attributes
                             attrs_to_remove[(s_copy, t_copy)] = diff_attrs
+        # TODO: also add edge Collections attributes to remove to the set # Collections Feature
+        # pass over each collection to remove attributes and add all of its attributes with the corresponding edge
         return attrs_to_remove
 
     def nodes_to_merge(self) -> dict[NodeName, set[NodeName]]:
@@ -454,6 +470,7 @@ class Rule:
                 # New edges from existing P nodes
                 if all([(s_origin, t_origin) not in self.p.edges() for s_origin in s_origins for t_origin in t_origins]):
                     edges_to_add.add((s,t))
+        #TODO: if one of the edge's nodes is a collection - add the edge to each of the nodes in the collections
         return edges_to_add
 
     def node_attrs_to_add(self) -> dict[NodeName, dict]:
@@ -474,6 +491,8 @@ class Rule:
                 merged_p_attrs = self._merge_node_attrs(node_rhs, p_origins)
                 if len(merged_p_attrs) != 0:
                     attrs_to_add[node_rhs] = merged_p_attrs
+        # TODO: also add node Collections attributes to add to the set # Collections Feature
+        # pass over each collection to add attributes 
         return attrs_to_add
 
     def edge_attrs_to_add(self) -> dict[EdgeName, dict]:
@@ -494,5 +513,7 @@ class Rule:
                 merged_p_attrs = self._merge_edge_attrs((s, t), s_origins, t_origins)
                 if len(merged_p_attrs) != 0:
                     attrs_to_add[(s, t)] = merged_p_attrs
+        #TODO: also add edge Collections attributes to add to the set # Collections Feature
+        # pass over each collection to add attributes and add all of its attributes with the corresponding edge
         return attrs_to_add
 

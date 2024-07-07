@@ -517,6 +517,7 @@ def _restore_graph(graph: DiGraph, last_copy_graph: DiGraph):
                  edges=last_copy_graph.edges(data=True))
 
 # %% ../nbs/06_transform.ipynb 28
+# TODO: add collections input # Collections Feature
 def _rewrite_match(input_graph: DiGraph, match: Match,
                    lhs_graph: DiGraph, p_graph: DiGraph, rhs: str,
                    render_rhs: dict[str, RenderFunc],
@@ -548,6 +549,7 @@ def _rewrite_match(input_graph: DiGraph, match: Match,
     try:
         # Parse RHS according to current match (with render dictionary)
         rhs_graph = rhs_to_graph(rhs, match, render_rhs) if rhs else None
+        # TODO: add collections to rule input # Collections Feature
         rule = Rule(lhs_graph, p_graph, rhs_graph, merge_policy=merge_policy)
         # Transform the graph
         lhs_input_map = match.mapping
@@ -595,16 +597,29 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
     _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
 
     # Parse LHS and P (global for all matches)
+    #TODO: add a parsing check for the new '&' symbol # Collections Feature
+    '''
+    lhs_strs = lhs.split('&)
+    assert len(lhs_strs) <= 2
+    lhs = lhs_strs[0]
+    if (len(lhs_strs) == 2):
+        lhs_collections = lhs_strs[1]
+    else:
+        lhs_collections = ''
+    '''
     lhs_graph, condition = lhs_to_graph(lhs, condition)
     p_graph = p_to_graph(p) if p else None
     
     if is_recursive:
         while True:
             try:
-                next_match = next(find_matches(input_graph, lhs_graph, condition=condition))
+                next_match = next(find_matches(input_graph, lhs_graph, condition=condition))  #TODO: add lhs_collections to find_matches input # Collections Feature
+                #lhs_graph = match_lhs_graph(lhs_graph, match)
+                #p_graph = match_p_graph(p_graph, match)
                 if display_matches:
                     draw_match(input_graph, next_match)
                 yield next_match
+                # TODO: add collections to rewrite_match input # Collections Feature
                 new_res = _rewrite_match(input_graph, next_match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
             except StopIteration:
                 break
@@ -616,12 +631,13 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
         copy_input_graph = _copy_graph(input_graph)
 
         # Find matches lazily and transform
-        for match in find_matches(copy_input_graph, lhs_graph, condition=condition):
+        for match in find_matches(copy_input_graph, lhs_graph, condition=condition): #TODO: add lhs_collections to find_matches input # Collections Feature
             if display_matches:
                 draw_match(input_graph, match)
             # the match object points to the copy graph, so we need to move it to the original graph for imperative changes
             match.set_graph(input_graph)
             yield match
+            # TODO: add collections to rewrite_match input # Collections Feature
             new_res = _rewrite_match(input_graph, match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
 
 
