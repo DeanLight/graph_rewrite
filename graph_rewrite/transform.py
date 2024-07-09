@@ -384,9 +384,9 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         For each clone of an LHS node (apart from the first one), add it to the input graph 
         (clone with edges and attributes) and add the pair (clone_name, lhs_node_name) to the p->input mapping.
     """
-    # Map each cloned lhs node to a flag, denoting whether the original node is reused with the same name in P.
+    # Map each cloned p node to a flag, denoting whether the original node is reused with the same name in P.
     # If not, the original node will be removed later
-    cloned_to_flags_map = {cloned_lhs_node: False for cloned_lhs_node in rule.nodes_to_clone().keys()}
+    cloned_to_flags_map = {cloned_p_node: False for cloned_p_node in rule.nodes_to_clone().keys()}
     for cloned_lhs_node, p_clones in rule.nodes_to_clone().items():
         for p_clone in p_clones:
             # Original cloned node is reused in P, preserve it
@@ -415,17 +415,19 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
             p_node = list(rule._rev_p_lhs[lhs_node])[0]
             p_input_map[p_node] = lhs_input_map[lhs_node]
 
-    # Remove edges.
-    for lhs_src, lhs_target in rule.edges_to_remove():
+    # TODO: also pass over all collections' nodes and either remove or clone or preserve according to the rule # Collections Feature
+
+    # Remove edges. This also captures collections edges # Collections Feature
+    for lhs_src, lhs_target in rule.edges_to_remove(): 
         _log(f"Remove edge ({p_input_map[lhs_src]}, {p_input_map[lhs_target]})", is_log)
         _remove_edge(input_graph, (p_input_map[lhs_src], p_input_map[lhs_target]))
 
-    # Remove node attrs.
+    # Remove node attrs. This also captures collections edges # Collections Feature
     for p_node, attrs_to_remove in rule.node_attrs_to_remove().items():
         _log(f"Remove attrs {attrs_to_remove} from node {p_input_map[p_node]}", is_log)
         _remove_node_attrs(input_graph, p_input_map[p_node], attrs_to_remove)
 
-    # Remove edge attrs.
+    # Remove edge attrs. This also captures collections edges # Collections Feature
     for (p_src, p_target), attrs_to_remove in rule.edge_attrs_to_remove().items():
         _log(f"Remove attrs {attrs_to_remove} from edge {(p_input_map[p_src], p_input_map[p_target])}", is_log)
         _remove_edge_attrs(input_graph, (p_input_map[p_src], p_input_map[p_target]), attrs_to_remove)
@@ -473,17 +475,17 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
             p_node = list(rule._rev_p_rhs[rhs_node])[0]
             rhs_input_map[rhs_node] = p_input_map[p_node]
 
-    # Add edges.
+    # Add edges. This also captures collections edges # Collections Feature
     for rhs_src, rhs_target in rule.edges_to_add():
         _log(f"Add edge ({rhs_input_map[rhs_src]}, {rhs_input_map[rhs_target]})", is_log)
         _add_edge(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]))
 
-    # Add node attrs.
+    # Add node attrs. This also captures collections edges # Collections Feature
     for rhs_node, attrs_to_add in rule.node_attrs_to_add().items():
         _log(f"Added attrs {attrs_to_add} to node {rhs_input_map[rhs_node]}", is_log)
         _add_node_attrs(input_graph, rhs_input_map[rhs_node], attrs_to_add)
 
-    # Add edge attrs.
+    # Add edge attrs. This also captures collections edges # Collections Feature
     for (rhs_src, rhs_target), attrs_to_add in rule.edge_attrs_to_add().items():
         _log(f"Added attrs {attrs_to_add} to edge {(rhs_input_map[rhs_src], rhs_input_map[rhs_target])}", is_log)
         _add_edge_attrs(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]), attrs_to_add)
@@ -549,7 +551,7 @@ def _rewrite_match(input_graph: DiGraph, match: Match,
     try:
         # Parse RHS according to current match (with render dictionary)
         rhs_graph = rhs_to_graph(rhs, match, render_rhs) if rhs else None
-        # TODO: add collections to rule input # Collections Feature
+        # TODO: add collection_mapping as an argument to rule input (from match) # Collections Feature
         rule = Rule(lhs_graph, p_graph, rhs_graph, merge_policy=merge_policy)
         # Transform the graph
         lhs_input_map = match.mapping
@@ -597,13 +599,13 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
     _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
 
     # Parse LHS and P (global for all matches)
-    #TODO: add a parsing check for the new '&' symbol # Collections Feature
+    #TODO: add a parsing check for the new '^' symbol in p and lhs # Collections Feature
     '''
-    lhs_strs = lhs.split('&)
-    assert len(lhs_strs) <= 2
-    lhs = lhs_strs[0]
-    if (len(lhs_strs) == 2):
-        lhs_collections = lhs_strs[1]
+    lhs_strs = lhs.split('^')
+    assert len(lhs_strs) <= 2 and len(lhs_strs) >= 1
+    lhs = lhs_split[0]
+    if (len(str_split) == 2):
+        lhs_collections = lhs_split[1]
     else:
         lhs_collections = ''
     '''
@@ -614,8 +616,6 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
         while True:
             try:
                 next_match = next(find_matches(input_graph, lhs_graph, condition=condition))  #TODO: add lhs_collections to find_matches input # Collections Feature
-                #lhs_graph = match_lhs_graph(lhs_graph, match)
-                #p_graph = match_p_graph(p_graph, match)
                 if display_matches:
                     draw_match(input_graph, next_match)
                 yield next_match

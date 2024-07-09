@@ -152,4 +152,11 @@ def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc =
     # Then filter the list, to contain only the filtered match whose unfiltered version matches the condition
     filtered_matches =  [filtered_match for (unfiltered_match, filtered_match) in matches_list if condition(unfiltered_match)]
     # And finally, remove duplicates (might be created because we removed the anonymous nodes)
+    #TODO: call add_collections fore each match in _remove_duplicated_matches(filtered_matches) and yield from the result # Collections Feature
+    """
+    filtered_matches = _remove_duplicated_matches(filtered_matches)
+    for match in filtered_matches:
+          match.add_collections(collection_lhs)
+    yield from filtered_matches
+    """
     yield from _remove_duplicated_matches(filtered_matches)

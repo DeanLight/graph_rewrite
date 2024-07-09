@@ -48,7 +48,7 @@ class Match:
         self._edges: List[EdgeName] = edges
         # self._collections: List[CollectionName] = List() # Collections Feature
         self.mapping: Dict[NodeName, NodeName] = mapping
-        # self.collection_mapping: Dict[CollectionName, Collections] = Dict() # Collections Feature
+        # self.collection_mapping: Dict[CollectionName, MatchCollection] = Dict() # Collections Feature
 
     def __get_node(self, pattern_node):
         if pattern_node not in self._nodes:
@@ -154,7 +154,7 @@ def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, N
 
     return Match(input, nodes_list, edges_list, cleared_mapping)
 
-# %% ../nbs/02_match_class.ipynb 41
+# %% ../nbs/02_match_class.ipynb 40
 def draw_match(g,m,**kwargs):
     g_copy = g.copy()
     node_styles={}
@@ -164,6 +164,18 @@ def draw_match(g,m,**kwargs):
         node_styles[name_in_g] = 'stroke:red,stroke-width:4px;'
     for u,v in m._edges:
         edge_styles[m.mapping[u],m.mapping[v]]='stroke:red,stroke-width:4px;'
+
+    #TODO: add all nodes from node collections to g_copy and the same for edges # Collections Feature
+    '''
+    for name_in_m, collection in m.collection_mapping.items():
+        is_nodes = collection.is_nodes
+        for i, item in enumerate(collection):
+            if is_nodes:
+                g_copy.nodes[item]['label']= (name_in_m + "_" + str(i))
+                node_styles[name_in_g] = 'stroke:red,stroke-width:4px;'
+            else:
+                edge_styles[item]='stroke:red,stroke-width:4px;'
+    '''
 
     draw(g_copy,node_styles=node_styles,edge_styles=edge_styles,**kwargs)
 
