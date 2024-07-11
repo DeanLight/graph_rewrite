@@ -516,7 +516,7 @@ def _restore_graph(graph: DiGraph, last_copy_graph: DiGraph):
     graph.update(nodes=last_copy_graph.nodes(data=True),
                  edges=last_copy_graph.edges(data=True))
 
-# %% ../nbs/06_transform.ipynb 29
+# %% ../nbs/06_transform.ipynb 28
 def _rewrite_match(input_graph: DiGraph, match: Match,
                    lhs_graph: DiGraph, p_graph: DiGraph, rhs: str,
                    render_rhs: dict[str, RenderFunc],
@@ -562,7 +562,7 @@ def _rewrite_match(input_graph: DiGraph, match: Match,
         _restore_graph(input_graph, saved_graph)
         raise e
 
-# %% ../nbs/06_transform.ipynb 32
+# %% ../nbs/06_transform.ipynb 30
 def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
                    condition: FilterFunc = None,
                    render_rhs: dict[str, RenderFunc] = None,
@@ -626,7 +626,7 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
             new_res = _rewrite_match(input_graph, match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
 
 
-# %% ../nbs/06_transform.ipynb 33
+# %% ../nbs/06_transform.ipynb 31
 @delegates(rewrite_iter)
 def rewrite(input_graph: DiGraph, lhs: str,**kwargs
                    ) -> List[Match]:
