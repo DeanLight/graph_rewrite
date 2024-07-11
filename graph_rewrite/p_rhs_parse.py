@@ -33,7 +33,7 @@ p_parser = Lark(r"""
 
     empty:
     pattern: vertex (connection vertex)*
-    patterns: pattern (";" pattern)* | empty
+    patterns: pattern (";" pattern)* | empty # TODO: Replace ";" with "," # Collections Feature
 
     """, parser="lalr", start='patterns' , debug=True)
 

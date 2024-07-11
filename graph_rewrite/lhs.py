@@ -45,7 +45,7 @@ lhs_parser = Lark(r"""
     | ANONYMUS [attributes]
 
     pattern: vertex (connection vertex)*
-    patterns: pattern (";" pattern)*
+    patterns: pattern (";" pattern)* # TODO: Replace ";" with "," # Collections Feature
 
     """, parser="lalr", start='patterns' , debug=True)
 
@@ -263,11 +263,25 @@ def lhs_to_graph(lhs: str, condition = None,debug=False):
                                       and an extended condition function as mentioned above.
     """
     try:
+        #TODO: add split for collections and also return lhs_collections_graph # Collections Feature
+        '''
+        lhs_strs = lhs.split(';')
+        assert len(lhs_strs) <= 2 and len(lhs_strs) >= 1
+        lhs = lhs_split[0]
+        if (len(str_split) == 2):
+            lhs_collections = lhs_split[1]
+        else:
+            lhs_collections = ''
+        if lhs_collections != '':
+            collections_tree = lhs_parser.parse(lhs)
+        '''
         tree = lhs_parser.parse(lhs)
         if debug:
-            return tree, None
+            return tree, None # , collections_tree # Collections Feature
         final_graph, constraints = graphRewriteTransformer(component="LHS").transform(tree)
         # constraints is a dictionary: vertex/edge -> {attr_name: (value, type), ...}
+        # collections_graph, collections_constraints = graphRewriteTransformer(component="LHS").transform(collections_tree) # Collections Feature
+        # TODO: combine constraints and collection_constraints? # Collections Feature
 
         # add the final constraints to the "condition" function
         def type_condition(match: Match):
@@ -298,7 +312,7 @@ def lhs_to_graph(lhs: str, condition = None,debug=False):
             else:
                 return flag and condition(match) 
                 
-        return final_graph, type_condition
+        return final_graph, type_condition # , collections_graph # Collections Feature
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
         raise GraphRewriteException('Unable to convert LHS: {}'.format(e))
 

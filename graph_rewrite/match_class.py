@@ -154,7 +154,7 @@ def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, N
 
     return Match(input, nodes_list, edges_list, cleared_mapping)
 
-# %% ../nbs/02_match_class.ipynb 40
+# %% ../nbs/02_match_class.ipynb 39
 def draw_match(g,m,**kwargs):
     g_copy = g.copy()
     node_styles={}
