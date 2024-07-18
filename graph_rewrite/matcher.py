@@ -86,6 +86,25 @@ def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> Tuple[DiGraph,
                 # TODO: add a check that isom_mapping does not contradict node_mapping
                 yield (nodes_subg, isom_mapping)
 
+
+
+''' # Collections Feature - replace find_structural_matches with more efficient way of pruning
+def find_structural_matches(pattern,g):
+
+  possible_candidates={
+  node_name:nodes_that_match_on_attributes(pattern[node_name],g)
+  }
+
+  for node_options in itertools.product(node,possible_candidates.values()):
+  subgraph = g.subgraph(node_options)
+  if isomorphism (pattern,sub_graph)
+    yield subgraph
+
+example pattern:
+- { 'x':{a=b}, 'y':{}} # first phase
+- { 'x':{a=b,_id=1}, 'y':{}} # second phase
+'''
+
 # %% ../nbs/03_matcher.ipynb 14
 def _does_isom_match_pattern(isom: Tuple[DiGraph, dict], pattern: DiGraph) -> bool:
     """Given a graph that is isomorphic to the pattern, checks whether they also
@@ -194,3 +213,17 @@ def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc =
     yield from filtered_matches
     """
     yield from _remove_duplicated_matches(filtered_matches)
+
+
+    ''' # Collections Feature - change find_matches to work according to the new find_structural_matches 
+    def find_matches(pattern,collection_pattern,g,condition_funcs):
+  
+        for phase_1_iso in  find_structural_matches(pattern,g):
+            phase_1_match = pattern.copy()
+            # add _id constrains from phase_1_iso
+            # find intersection nodes ....
+        phase_2_isos = [phase_2_iso in find_structural_matches(collection_pattern_with_id_constraints,g)]  
+        match = Match(regular_nodes = pahse_1_iso,collections = phase_2_isos)  
+        if condition(match):
+            yield match
+    '''
