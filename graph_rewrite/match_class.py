@@ -42,13 +42,12 @@ class Match:
     """Represents a single match of a pattern inside an input graph.
      Provides a subview to a graph, limited to the nodes, edges and attributes specified in the pattern.
     """
-    def __init__(self, graph: DiGraph, nodes: List[NodeName], edges: List[EdgeName], mapping: Dict[NodeName, NodeName]):
+    def __init__(self, graph: DiGraph, nodes: List[NodeName], edges: List[EdgeName], mapping: Dict[NodeName, NodeName], collection_mapping: Dict[NodeName, Set[NodeName]]):
         self.graph: DiGraph = graph
         self._nodes: List[NodeName] = nodes
         self._edges: List[EdgeName] = edges
-        # self._collections: List[CollectionName] = List() # Collections Feature
         self.mapping: Dict[NodeName, NodeName] = mapping
-        # self.collection_mapping: Dict[CollectionName, MatchCollection] = Dict() # Collections Feature
+        self.collection_mapping: Dict[NodeName, Set[NodeName]] = collection_mapping
 
     def __get_node(self, pattern_node):
         if pattern_node not in self._nodes:
@@ -60,14 +59,10 @@ class Match:
             raise GraphRewriteException(f"Edge {(pattern_src, pattern_dst)} does not exist in the pattern")
         return self.graph.edges[self.mapping[pattern_src], self.mapping[pattern_dst]]
     
-    def __get_collection(self, pattern): # Collections feature
-        pass
-    # TODO: get the collection.
-    '''
-    if pattern not in self._collections:
-            raise GraphRewriteException(f"Collection {pattern}} does not exist in the pattern")
-        return self.collection_mapping[pattern]
-    '''
+    def __get_collection(self, pattern): 
+        if pattern not in self.collection_mapping.keys:
+            raise GraphRewriteException(f"Collection {pattern} does not exist in the pattern")
+        return self.collection_mapping[pattern]   
 
     def nodes(self):
         return {pattern_node: self.__get_node(pattern_node) for pattern_node in self._nodes}
@@ -100,23 +95,12 @@ class Match:
             if str(key).__contains__("->") and len(str(key).split("->")) == 2:
                 end_nodes = str(key).split("->")
                 return self.__get_edge(end_nodes[0], end_nodes[1])
-                #TODO: add a check of whether it's an edge or an edge collection # Collections Feature
-                '''
-                if key in self._edges:
-                    end_nodes = str(key).split("->")
-                    return self.__get_edge(end_nodes[0], end_nodes[1])
-                else:
-                    return self.__get_collection(key)
-                '''
             else:
-                return self.__get_node(key)
-                #TODO: add a check of whether it's an edge or an edge collection # Collections Feature
-                '''
                 if key in self._nodes:
                     return self.__get_node(key)
                 else:
                     return self.__get_collection(key)
-                '''
+            
         except:
             raise GraphRewriteException(f"The symbol {key} does not exist in the pattern, or it was removed from the graph")
         
@@ -124,7 +108,7 @@ class Match:
         return self.mapping.__str__()
 
 # %% ../nbs/02_match_class.ipynb 19
-def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, NodeName], filter: bool=True) -> Match:
+def mapping_to_match(input: DiGraph, pattern: DiGraph, collections_pattern: DiGraph, mapping: Dict[NodeName, NodeName], collections_mapping: Dict[NodeName, Set[NodeName]], filter: bool=True) -> Match:
     """Given a mapping, which denotes a match of the pattern in the input graph,
     create a corresponding instance of the Match class.
 
@@ -132,6 +116,8 @@ def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, N
         input (DiGraph): An input graph
         pattern (DiGraph): A pattern graph
         mapping (Dict[NodeName, NodeName]): A mapping from nodes in the pattern graph to nodes in the input graph, 
+        that denotes a single match between the two.
+        collections_mapping (Dict[CollectionName, set[NodeName]]): A mapping from nodes in the collections_pattern graph to nodes in the input graph, 
         that denotes a single match between the two.
         filter (bool, optional): If True, filter anonymous nodes and edges. Defaults to True.
 
@@ -152,7 +138,13 @@ def mapping_to_match(input: DiGraph, pattern: DiGraph, mapping: Dict[NodeName, N
             continue # as before
         edges_list.append((n1, n2))
 
-    return Match(input, nodes_list, edges_list, cleared_mapping)
+    if collections_pattern:
+        for (n1, n2) in collections_pattern.edges:
+            if filter and (is_anonymous_node(n1) or is_anonymous_node(n2)) and not (n1, n2) in edges_list:
+                continue # as before
+            edges_list.append((n1, n2))
+
+    return Match(input, nodes_list, edges_list, cleared_mapping, collections_mapping)
 
 # %% ../nbs/02_match_class.ipynb 39
 def draw_match(g,m,**kwargs):
@@ -165,8 +157,6 @@ def draw_match(g,m,**kwargs):
     for u,v in m._edges:
         edge_styles[m.mapping[u],m.mapping[v]]='stroke:red,stroke-width:4px;'
 
-    #TODO: add all nodes from node collections to g_copy and the same for edges # Collections Feature
-    '''
     for name_in_m, collection in m.collection_mapping.items():
         is_nodes = collection.is_nodes
         for i, item in enumerate(collection):
@@ -175,7 +165,7 @@ def draw_match(g,m,**kwargs):
                 node_styles[name_in_g] = 'stroke:red,stroke-width:4px;'
             else:
                 edge_styles[item]='stroke:red,stroke-width:4px;'
-    '''
+
 
     draw(g_copy,node_styles=node_styles,edge_styles=edge_styles,**kwargs)
 
