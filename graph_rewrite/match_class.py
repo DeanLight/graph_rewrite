@@ -55,15 +55,27 @@ class Match:
         return self.graph.nodes[self.mapping[pattern_node]]
 
     def __get_edge(self, pattern_src, pattern_dst):
-        if (pattern_src, pattern_dst) not in self._edges:
+        edges = set()
+        if pattern_src in self.collection_mapping:
+            if pattern_dst in self.collection_mapping:    
+                for src in self.collection_mapping[pattern_src]:
+                    for dst in self.collection_mapping[pattern_dst]:
+                        edges.add(self.graph.edges[src, dst])
+            else:
+                for src in self.collection_mapping[pattern_src]:
+                    edges.add(self.graph.edges[src, self.mapping[pattern_dst]])
+        elif pattern_dst in self.collection_mapping:    
+            for dst in self.collection_mapping[pattern_dst]:
+                    edges.add(self.graph.edges[self.mapping[pattern_src], dst])
+        elif (pattern_src, pattern_dst) not in self._edges:
             raise GraphRewriteException(f"Edge {(pattern_src, pattern_dst)} does not exist in the pattern")
         return self.graph.edges[self.mapping[pattern_src], self.mapping[pattern_dst]]
     
     def __get_collection(self, pattern): 
-        if pattern not in self.collection_mapping.keys:
+        if pattern not in self.collection_mapping.keys():
             raise GraphRewriteException(f"Collection {pattern} does not exist in the pattern")
-        return self.collection_mapping[pattern]   
-
+        return [self.graph.nodes[node] for node in self.collection_mapping[pattern]] #self.collection_mapping[pattern]
+    
     def nodes(self):
         return {pattern_node: self.__get_node(pattern_node) for pattern_node in self._nodes}
 
@@ -155,18 +167,31 @@ def draw_match(g,m,**kwargs):
         g_copy.nodes[name_in_g]['label']=name_in_m
         node_styles[name_in_g] = 'stroke:red,stroke-width:4px;'
     for u,v in m._edges:
-        edge_styles[m.mapping[u],m.mapping[v]]='stroke:red,stroke-width:4px;'
+        if not (u in m.collection_mapping.keys() or v in m.collection_mapping.keys()):
+            edge_styles[m.mapping[u],m.mapping[v]]='stroke:red,stroke-width:4px;'
+    '''    if u in m.collection_mapping.keys():
+            if v in m.collection_mapping.keys():
+                for u_node in m.collection_mapping[u]:
+                    for v_node in m.collection_mapping[v]:
+                        edge_styles[u_node,v_node]='stroke:red,stroke-width:4px;'
+            else:
+                for u_node in m.collection_mapping[u]:
+                    edge_styles[u_node,m.mapping[v]]='stroke:red,stroke-width:4px;'
+        elif v in m.collection_mapping.keys():
+            for v_node in m.collection_mapping[v]:
+                    edge_styles[m.mapping[u],v_node]='stroke:red,stroke-width:4px;'
+        else:
+            edge_styles[m.mapping[u],m.mapping[v]]='stroke:red,stroke-width:4px;'
+            '''
+    
 
     for name_in_m, collection in m.collection_mapping.items():
-        is_nodes = collection.is_nodes
-        for i, item in enumerate(collection):
-            if is_nodes:
-                g_copy.nodes[item]['label']= (name_in_m + "_" + str(i))
-                node_styles[name_in_g] = 'stroke:red,stroke-width:4px;'
-            else:
-                edge_styles[item]='stroke:red,stroke-width:4px;'
-
+        for i, name_in_g in enumerate(collection):
+            g_copy.nodes[name_in_g]['label']= (name_in_m + "_" + str(i))
+            node_styles[name_in_g] = 'stroke:red,stroke-width:4px;'
+            
 
     draw(g_copy,node_styles=node_styles,edge_styles=edge_styles,**kwargs)
-
+    
+    
     

@@ -99,7 +99,8 @@ def _remove_node(graph: DiGraph, node_to_remove: NodeName):
         GraphRewriteException: If the removed node doesn't exist in the graph
     """
     if node_to_remove not in graph.nodes():
-        raise GraphRewriteException(_exception_msgs["no_such_node"](node_to_remove))
+        return
+        #raise GraphRewriteException(_exception_msgs["no_such_node"](node_to_remove))
     graph.remove_node(node_to_remove)
 
 # %% ../nbs/06_transform.ipynb 11
@@ -363,13 +364,15 @@ def _log(msg: str, is_log: bool, color: str = _BLACK):
         print(f"{color}{msg}{_BLACK}")
 
 # %% ../nbs/06_transform.ipynb 22
-def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: dict[NodeName, NodeName], is_log: bool) -> dict[NodeName, NodeName]:
+def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: dict[NodeName, NodeName], collections_input_graph: dict,
+                                is_log: bool) -> dict[NodeName, NodeName]:
     """Performs the restrictive phase of the rewriting process on some match: Clone nodes, Remove nodes and edges (and/or their attributes).
 
     Args:
         input_graph (DiGraph): A graph to rewrite
         rule (Rule): A rule that dictates what transformations should the graph go through
         lhs_input_map (dict[NodeName, NodeName]): Maps names of LHS nodes to names of input graph nodes, based on the match which we rewrite
+        collections_input_map (dict[NodeName, Set[NodeName]]): Maps names of Collection nodes to set of input graph nodes, based on the match which we rewrite
         is_log (bool): If True, logs are printed throughout the process.
 
     Returns:
@@ -391,10 +394,21 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         for p_clone in p_clones:
             # Original cloned node is reused in P, preserve it
             if p_clone == cloned_lhs_node:
-                _log(f"Clone {lhs_input_map[cloned_lhs_node]}", is_log)
-                cloned_to_flags_map[cloned_lhs_node] = True
-                p_input_map[p_clone] = lhs_input_map[cloned_lhs_node]
+                if cloned_lhs_node in collections_input_graph:
+                    for node in collections_input_graph[cloned_lhs_node]:
+                        _log(f"Clone {node}", is_log)
+                        p_input_map[p_clone] = node
+                    cloned_to_flags_map[cloned_lhs_node] = True
+                else:
+                    _log(f"Clone {lhs_input_map[cloned_lhs_node]}", is_log)
+                    cloned_to_flags_map[cloned_lhs_node] = True
+                    p_input_map[p_clone] = lhs_input_map[cloned_lhs_node]
             # All other clones require actual cloning (mapped to the new cloned node in input graph)
+            elif cloned_lhs_node in collections_input_graph:
+                for node in collections_input_graph[cloned_lhs_node]:
+                    new_clone_id = _clone_node(input_graph, node)
+                    _log(f"Clone {node} as {new_clone_id}", is_log)
+                    p_input_map[p_clone] = new_clone_id
             else:
                 new_clone_id = _clone_node(input_graph, lhs_input_map[cloned_lhs_node])
                 _log(f"Clone {lhs_input_map[cloned_lhs_node]} as {new_clone_id}", is_log)
@@ -409,26 +423,73 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         # Cloned lhs nodes which weren't reused and so, should be deleted
         if lhs_node in rule.nodes_to_remove() or (lhs_node in cloned_to_flags_map.keys() and cloned_to_flags_map[lhs_node] == False):
             _log(f"Remove node {lhs_input_map[lhs_node]}", is_log)
-            _remove_node(input_graph, lhs_input_map[lhs_node])        
+            _remove_node(input_graph, lhs_input_map[lhs_node])
         # Else, either a saved cloned node (already preserved) or a regular one (should preserve them)
         elif lhs_node not in cloned_to_flags_map.keys():
             p_node = list(rule._rev_p_lhs[lhs_node])[0]
             p_input_map[p_node] = lhs_input_map[lhs_node]
+    
+    for collection in rule.collection_mapping:
+        # Cloned Collection nodes which weren't reused and so, should be deleted
+        if collection in rule.nodes_to_remove() or (collection in cloned_to_flags_map.keys() and cloned_to_flags_map[collection] == False):
+            for node in collections_input_graph[collection]:
+                _log(f"Remove collection node {node}", is_log)
+                _remove_node(input_graph, node)
+        # Else, either a saved cloned node (already preserved) or a regular one (should preserve them)
+        elif collection not in cloned_to_flags_map.keys(): 
+            p_node = list(rule._rev_p_lhs[collection])[0]
+            p_input_map[p_node] = collections_input_graph[collection]
 
     # Remove edges.
-    for lhs_src, lhs_target in rule.edges_to_remove():
-        _log(f"Remove edge ({p_input_map[lhs_src]}, {p_input_map[lhs_target]})", is_log)
-        _remove_edge(input_graph, (p_input_map[lhs_src], p_input_map[lhs_target]))
+    for lhs_src, lhs_target in rule.edges_to_remove(): 
+        if type(p_input_map[lhs_src]) == set:
+            if type(p_input_map[lhs_target]) == set:
+                for src in p_input_map[lhs_src]:
+                    for target in p_input_map[lhs_target]:
+                        _log(f"Remove edge ({src}, {target})", is_log)
+                        _remove_edge(input_graph, (src, target))
+            else:
+                for src in p_input_map[lhs_src]:
+                    _log(f"Remove edge ({src}, {p_input_map[lhs_target]})", is_log)
+                    _remove_edge(input_graph, (src, p_input_map[lhs_target]))
+        elif type(p_input_map[lhs_target]) == set:
+            for target in p_input_map[lhs_target]:
+                _log(f"Remove edge ({p_input_map[lhs_src]}, {target})", is_log)
+                _remove_edge(input_graph, (p_input_map[lhs_src], target))
+        else:
+            _log(f"Remove edge ({p_input_map[lhs_src]}, {p_input_map[lhs_target]})", is_log)
+            _remove_edge(input_graph, (p_input_map[lhs_src], p_input_map[lhs_target]))
 
     # Remove node attrs.
     for p_node, attrs_to_remove in rule.node_attrs_to_remove().items():
-        _log(f"Remove attrs {attrs_to_remove} from node {p_input_map[p_node]}", is_log)
-        _remove_node_attrs(input_graph, p_input_map[p_node], attrs_to_remove)
+        if type(p_input_map[p_node]) == set:
+            for node in p_input_map[p_node]:
+                _log(f"Remove attrs {attrs_to_remove} from node {node}", is_log)
+                _remove_node_attrs(input_graph, node, attrs_to_remove)
+        else:        
+            _log(f"Remove attrs {attrs_to_remove} from node {p_input_map[p_node]}", is_log)
+            _remove_node_attrs(input_graph, p_input_map[p_node], attrs_to_remove)
 
     # Remove edge attrs.
-    for (p_src, p_target), attrs_to_remove in rule.edge_attrs_to_remove().items():
-        _log(f"Remove attrs {attrs_to_remove} from edge {(p_input_map[p_src], p_input_map[p_target])}", is_log)
-        _remove_edge_attrs(input_graph, (p_input_map[p_src], p_input_map[p_target]), attrs_to_remove)
+    for (p_src, p_target), attrs_to_remove in rule.edge_attrs_to_remove().items(): 
+        if type(p_input_map[p_src]) == set:
+            if type(p_input_map[p_target]) == set:
+                for src in p_input_map[p_src]:
+                    for target in p_input_map[p_target]:
+                        _log(f"Remove attrs {attrs_to_remove} from edge {(src, target)}", is_log)
+                        _remove_edge_attrs(input_graph, (src, target), attrs_to_remove)
+            else:
+                for src in p_input_map[p_src]:
+                    _log(f"Remove attrs {attrs_to_remove} from edge {(src, p_input_map[p_target])}", is_log)
+                    _remove_edge_attrs(input_graph, (src, p_input_map[p_target]), attrs_to_remove)
+        elif type(p_input_map[p_target]) == set:
+            for target in p_input_map[p_target]:
+                _log(f"Remove attrs {attrs_to_remove} from edge {(p_input_map[p_src], target)}", is_log)
+                _remove_edge_attrs(input_graph, (p_input_map[p_src], target), attrs_to_remove)
+        else:
+            _log(f"Remove attrs {attrs_to_remove} from edge {(p_input_map[p_src], p_input_map[p_target])}", is_log)
+            _remove_edge_attrs(input_graph, (p_input_map[p_src], p_input_map[p_target]), attrs_to_remove)
+            
 
     return p_input_map
 
@@ -474,19 +535,55 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
             rhs_input_map[rhs_node] = p_input_map[p_node]
 
     # Add edges.
-    for rhs_src, rhs_target in rule.edges_to_add():
-        _log(f"Add edge ({rhs_input_map[rhs_src]}, {rhs_input_map[rhs_target]})", is_log)
-        _add_edge(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]))
+    for rhs_src, rhs_target in rule.edges_to_add(): 
+        if type(rhs_input_map[rhs_src]) == set:
+            if type(rhs_input_map[rhs_target]) == set:
+                for src in rhs_input_map[rhs_src]:
+                    for target in rhs_input_map[rhs_target]:
+                        _log(f"Add edge ({src}, {target})", is_log)
+                        _add_edge(input_graph, (src, target))
+            else:
+                for src in rhs_input_map[rhs_src]:
+                    _log(f"Add edge ({src}, {rhs_input_map[rhs_target]})", is_log)
+                    _add_edge(input_graph, (src, rhs_input_map[rhs_target]))
+        elif type(rhs_input_map[rhs_target]) == set:
+            for target in rhs_input_map[rhs_target]:
+                _log(f"Add edge ({rhs_input_map[rhs_src]}, {target})", is_log)
+                _add_edge(input_graph, (rhs_input_map[rhs_src], target))
+        else:
+            _log(f"Add edge ({rhs_input_map[rhs_src]}, {rhs_input_map[rhs_target]})", is_log)
+            _add_edge(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]))
 
     # Add node attrs.
-    for rhs_node, attrs_to_add in rule.node_attrs_to_add().items():
-        _log(f"Added attrs {attrs_to_add} to node {rhs_input_map[rhs_node]}", is_log)
-        _add_node_attrs(input_graph, rhs_input_map[rhs_node], attrs_to_add)
+    for rhs_node, attrs_to_add in rule.node_attrs_to_add().items(): 
+        if type(rhs_input_map[rhs_node]) == set:
+            for node in rhs_input_map[rhs_node]:
+                _log(f"Added attrs {attrs_to_add} to node {node}", is_log)
+                _add_node_attrs(input_graph, node, attrs_to_add)
+        else:
+            _log(f"Added attrs {attrs_to_add} to node {rhs_input_map[rhs_node]}", is_log)
+            _add_node_attrs(input_graph, rhs_input_map[rhs_node], attrs_to_add)
 
     # Add edge attrs.
-    for (rhs_src, rhs_target), attrs_to_add in rule.edge_attrs_to_add().items():
-        _log(f"Added attrs {attrs_to_add} to edge {(rhs_input_map[rhs_src], rhs_input_map[rhs_target])}", is_log)
-        _add_edge_attrs(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]), attrs_to_add)
+    for (rhs_src, rhs_target), attrs_to_add in rule.edge_attrs_to_add().items(): 
+        if type(rhs_input_map[rhs_src]) == set:
+            if type(rhs_input_map[rhs_target]) == set:
+                for src in rhs_input_map[rhs_src]:
+                    for target in rhs_input_map[rhs_target]:
+                        _log(f"Added attrs {attrs_to_add} to edge {(src, target)}", is_log)
+                        _add_edge_attrs(input_graph, (src, target), attrs_to_add)
+            else:
+                for src in rhs_input_map[rhs_src]:
+                    _log(f"Added attrs {attrs_to_add} to edge {(src, rhs_input_map[rhs_target])}", is_log)
+                    _add_edge_attrs(input_graph, (src, rhs_input_map[rhs_target]), attrs_to_add)
+        elif type(rhs_input_map[rhs_target]) == set:
+            for target in rhs_input_map[rhs_target]:
+                _log(f"Added attrs {attrs_to_add} to edge {(rhs_input_map[rhs_src], target)}", is_log)
+                _add_edge_attrs(input_graph, (rhs_input_map[rhs_src], target), attrs_to_add)
+        else:
+            _log(f"Added attrs {attrs_to_add} to edge {(rhs_input_map[rhs_src], rhs_input_map[rhs_target])}", is_log)
+            _add_edge_attrs(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]), attrs_to_add)
+
 
 # %% ../nbs/06_transform.ipynb 25
 def _copy_graph(graph: DiGraph) -> DiGraph:
@@ -518,7 +615,7 @@ def _restore_graph(graph: DiGraph, last_copy_graph: DiGraph):
 
 # %% ../nbs/06_transform.ipynb 28
 def _rewrite_match(input_graph: DiGraph, match: Match,
-                   lhs_graph: DiGraph, p_graph: DiGraph, rhs: str,
+                   lhs_graph: DiGraph, p_graph: DiGraph, rhs: str, collections_graph: DiGraph,
                    render_rhs: dict[str, RenderFunc],
                    merge_policy: MergePolicy,
                    is_log: bool) -> Match:
@@ -548,11 +645,12 @@ def _rewrite_match(input_graph: DiGraph, match: Match,
     try:
         # Parse RHS according to current match (with render dictionary)
         rhs_graph = rhs_to_graph(rhs, match, render_rhs) if rhs else None
-        # TODO: add collections to rule input # Collections Feature
-        rule = Rule(lhs_graph, p_graph, rhs_graph, merge_policy=merge_policy)
+        rule = Rule(lhs_graph, p_graph, rhs_graph, collections_graph, match.collection_mapping, merge_policy=merge_policy)
         # Transform the graph
         lhs_input_map = match.mapping
-        p_input_map = _rewrite_match_restrictive(input_graph, rule, lhs_input_map, is_log)
+        collections_input_map = match.collection_mapping
+
+        p_input_map = _rewrite_match_restrictive(input_graph, rule, lhs_input_map, collections_input_map, is_log)
         _rewrite_match_expansive(input_graph, rule, p_input_map, is_log)
         _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
         return match
@@ -596,17 +694,19 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
     _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
 
     # Parse LHS and P (global for all matches)
-    lhs_graph, condition = lhs_to_graph(lhs, condition) # Add lhs_collections_graph to the output
+    lhs_graph, lhs_collections_graph, condition = lhs_to_graph(lhs, condition)
     p_graph = p_to_graph(p) if p else None
     
     if is_recursive:
         while True:
             try:
-                next_match = next(find_matches(input_graph, lhs_graph, condition=condition))  #TODO: add lhs_collections_graph to find_matches input # Collections Feature
+                next_match = next(find_matches(input_graph, lhs_graph, lhs_collections_graph, condition=condition))
                 if display_matches:
                     draw_match(input_graph, next_match)
                 yield next_match
-                new_res = _rewrite_match(input_graph, next_match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
+                new_res = _rewrite_match(input_graph, next_match, lhs_graph, p_graph, rhs, lhs_collections_graph,
+                            render_rhs, merge_policy, is_log)
+
             except StopIteration:
                 break
 
@@ -617,13 +717,14 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
         copy_input_graph = _copy_graph(input_graph)
 
         # Find matches lazily and transform
-        for match in find_matches(copy_input_graph, lhs_graph, condition=condition): #TODO: add lhs_collections_graph to find_matches input # Collections Feature
+        for match in find_matches(copy_input_graph, lhs_graph, lhs_collections_graph, condition=condition):
             if display_matches:
                 draw_match(input_graph, match)
             # the match object points to the copy graph, so we need to move it to the original graph for imperative changes
             match.set_graph(input_graph)
             yield match
-            new_res = _rewrite_match(input_graph, match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
+            new_res = _rewrite_match(input_graph, match, lhs_graph, p_graph, rhs, lhs_collections_graph,
+                                     render_rhs, merge_policy, is_log)
 
 
 # %% ../nbs/06_transform.ipynb 31

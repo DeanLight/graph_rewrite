@@ -268,6 +268,12 @@ def lhs_to_graph(lhs: str, condition = None,debug=False):
         lhs_strs = lhs.split(';')
         assert len(lhs_strs) <= 2 and len(lhs_strs) >= 1
         lhs = lhs_strs[0]
+        tree = lhs_parser.parse(lhs)
+        if debug:
+            return tree, collections_tree, None 
+        final_graph, constraints = graphRewriteTransformer(component="LHS").transform(tree)
+        # constraints is a dictionary: vertex/edge -> {attr_name: (value, type), ...}
+
         if (len(lhs_strs) == 2):
             lhs_collections = lhs_strs[1]
         else:
@@ -276,13 +282,6 @@ def lhs_to_graph(lhs: str, condition = None,debug=False):
             collections_tree = lhs_parser.parse(lhs_collections)
             collections_graph, _ = graphRewriteTransformer(component="LHS").transform(collections_tree)
             # TODO: combine constraints and collection_constraints? # Collections Feature
-
-    
-        tree = lhs_parser.parse(lhs)
-        if debug:
-            return tree, collections_tree, None 
-        final_graph, constraints = graphRewriteTransformer(component="LHS").transform(tree)
-        # constraints is a dictionary: vertex/edge -> {attr_name: (value, type), ...}
 
         # add the final constraints to the "condition" function
         def type_condition(match: Match):
