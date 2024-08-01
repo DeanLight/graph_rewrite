@@ -42,7 +42,8 @@ class Match:
     """Represents a single match of a pattern inside an input graph.
      Provides a subview to a graph, limited to the nodes, edges and attributes specified in the pattern.
     """
-    def __init__(self, graph: DiGraph, nodes: List[NodeName], edges: List[EdgeName], mapping: Dict[NodeName, NodeName], collection_mapping: Dict[NodeName, Set[NodeName]]):
+    def __init__(self, graph: DiGraph, nodes: List[NodeName], edges: List[EdgeName], 
+                 mapping: Dict[NodeName, NodeName], collection_mapping: Dict[NodeName, Set[NodeName]]):
         self.graph: DiGraph = graph
         self._nodes: List[NodeName] = nodes
         self._edges: List[EdgeName] = edges
@@ -120,7 +121,8 @@ class Match:
         return self.mapping.__str__()
 
 # %% ../nbs/02_match_class.ipynb 19
-def mapping_to_match(input: DiGraph, pattern: DiGraph, collections_pattern: DiGraph, mapping: Dict[NodeName, NodeName], collections_mapping: Dict[NodeName, Set[NodeName]], filter: bool=True) -> Match:
+def mapping_to_match(input: DiGraph, pattern: DiGraph, collections_pattern: DiGraph, mapping: Dict[NodeName, NodeName],
+                      collections_mapping: Dict[NodeName, Set[NodeName]], filter: bool=True) -> Match:
     """Given a mapping, which denotes a match of the pattern in the input graph,
     create a corresponding instance of the Match class.
 

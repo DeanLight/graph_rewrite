@@ -31,25 +31,6 @@ def _attributes_exist(input_graph_attrs: dict, pattern_attrs: dict) -> bool:
     return set(pattern_attrs.keys()).issubset(set(input_graph_attrs.keys()))
 
 # %% ../nbs/03_matcher.ipynb 9
-def _attributes_match(input_graph_attrs: dict, pattern_attrs: dict) -> bool:
-    """Given an input-graph node and a pattern node, checks whether the input-graph node
-    match on all attributes which the pattern node requires. If it does, then this input-graph node might be matched as that pattern node. 
-    Only used after _attributes_exist
-
-    Args:
-        input_graph_attrs (dict): Attributes of some input-graph node.
-        pattern_attrs (dict): Attributes of some pattern-graph node.
-
-    Returns:
-        bool: True if the input-graph node has all the attributes which the pattern node requires, False otherwise.
-    """
-    for key in pattern_attrs.keys():
-        if pattern_attrs[key] is None or pattern_attrs[key] == input_graph_attrs[key]:
-            continue
-        return False
-    return True
-
-
 def _nodes_that_match_on_attributes(attrs: dict, g: DiGraph) -> set[NodeName]:
     """
     Given a node attributes and a graph g, return a set of all nodes in g that has the same attributes as the pattern_node
@@ -63,12 +44,7 @@ def _nodes_that_match_on_attributes(attrs: dict, g: DiGraph) -> set[NodeName]:
         nodes_to_check = [node_id]
     else:
         nodes_to_check = list(g.nodes)
-    nodes_set = set()
-    for node in nodes_to_check:
-        if _attributes_exist(g.nodes[node], attrs): #and _attributes_match(g.nodes[node], attrs):
-            nodes_set.add(node)
-
-    return nodes_set
+    return {node for node in nodes_to_check if _attributes_exist(g.nodes[node], attrs)}
     
 
 # %% ../nbs/03_matcher.ipynb 11
@@ -104,10 +80,7 @@ def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> Tuple[DiGraph,
             match the pattern, and the mapping is a dictionary that maps nodes in that subgraph
             to nodes in the pattern.
     """
-def _find_structural_matches(graph: DiGraph, pattern: DiGraph):
-    possible_candidates = dict()
-    for node in pattern.nodes:
-        possible_candidates[node] = _nodes_that_match_on_attributes(pattern.nodes[node], graph)
+    possible_candidates = {node: _nodes_that_match_on_attributes(pattern.nodes[node], graph) for node in pattern.nodes}
     assignments = itertools.product(*(possible_candidates[node] for node in list(pattern.nodes)))
     for assignment in assignments:
         # Make sure the sub_nodes are unique
@@ -118,11 +91,9 @@ def _find_structural_matches(graph: DiGraph, pattern: DiGraph):
         subg.add_nodes_from(list(assignment))
         for edge in list(pattern.edges):
             graph_edge = (assignment_mapping[edge[0]], assignment_mapping[edge[1]])
-            if graph_edge not in graph.edges:
-                break
-            
-            if _attributes_exist(graph.edges[graph_edge], pattern.edges[edge]):
+            if graph_edge in graph.edges and _attributes_exist(graph.edges[graph_edge], pattern.edges[edge]):
               subg.add_edge(graph_edge[0], graph_edge[1])
+        # We only yield mappings for subgraphs that have the same amount of edges as the pattern - otherwise the subgraph won't be an isomorphism
         if len(subg.edges) == len(pattern.edges):
             yield assignment_mapping
         
@@ -178,13 +149,11 @@ def find_intersecting_nodes(match: dict, collection_pattern: DiGraph) -> set:
     # Step 1: Extract all node names from self._nodes and the node collections (if they do not exist yet, they will be empty - no harm is done).
     # Step 2: Find all nodes with the same name in collection_pattern - these are the intersecting nodes.
     # Step 3: Return all matching node names.
-    nodes_set = set()
     if collection_pattern is None:
-        return nodes_set
-    for node in collection_pattern.nodes:
-        if node in match.keys():
-            nodes_set.add(node)
-    return nodes_set
+        return set()
+    collection_nodes = set(collection_pattern.nodes)
+    match_nodes = set(match.keys())
+    return collection_nodes & match_nodes
 
 def find_collection_matches(input_graph: DiGraph, collecions_pattern: DiGraph, intersected_nodes_matches: List):
     matches_list = list()

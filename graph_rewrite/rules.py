@@ -217,7 +217,7 @@ class Rule:
                 if not p_attrs.issubset(lhs_attrs):
                     raise GraphRewriteException(_exception_msgs["add_attrs_in_p_node"](node_p))
         
-        # Nodes in P do NOT add attributes that aren't in the corresponding LHS node(s).
+        # Nodes in P do NOT add attributes that aren't in the corresponding Collection node(s).
         for node_lhs in self.collection_mapping:
             lhs_attrs = set(self.collections.nodes(data=True)[node_lhs].keys())
             p_copies = self._rev_p_lhs.get(node_lhs, set())
