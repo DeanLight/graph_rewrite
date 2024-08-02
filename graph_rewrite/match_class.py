@@ -171,6 +171,8 @@ def draw_match(g,m,**kwargs):
     for u,v in m._edges:
         if not (u in m.collection_mapping.keys() or v in m.collection_mapping.keys()):
             edge_styles[m.mapping[u],m.mapping[v]]='stroke:red,stroke-width:4px;'
+
+    # TODO: Currently this function does not draw edges of collections - this should be added
     '''    if u in m.collection_mapping.keys():
             if v in m.collection_mapping.keys():
                 for u_node in m.collection_mapping[u]:

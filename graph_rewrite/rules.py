@@ -208,7 +208,24 @@ class Rule:
         """Validates the LHS->P homomorphism, and raises appropriate exceptions if it's invalid.
         """
 
-        # Nodes in P do NOT add attributes that aren't in the corresponding LHS node(s).
+        # TODO: Here, and in the transform notebook, there are several places where there is unnecessary duplicated code. This places would be 
+        # marked, most with suggestions of how to specifically avoid these duplications and write the code in a more elegant way. Don't assume
+        # that all such duplications are marked with a to-do, also use github and see all added code and try to see if something was accidently
+        # missed. Hope it is as convenient as possible. 
+
+        # TODO: here the only reason for using two 'for' loops is the following line - lhs_attrs = set(self.lhs.nodes(data=True)[node_lhs].keys())
+        # The solution would be to create a dict from each node to its attributes, that would contain both lhs nodes and collection nodes, and
+        # using that dict you can do one 'for' loop.
+        # The dict would look something like this: 
+        '''
+        node_attr_dict = {
+        node: set(self.lhs.nodes(data=True)[node_lhs].keys()) for node in self.lhs.nodes
+        } | { # This is an "or" of dicts - to include both lhs and collections in one dict
+        node: set(self.collections.nodes(data=True)[node_lhs].keys()) for node in self.collections.nodes
+        }
+        '''
+        # Note that self.collections might be equals to None, so you should add a check that it actually exists
+        # Nodes in P do NOT add attributes that aren't in the corresponding LHS and Collection node(s).
         for node_lhs in self.lhs.nodes():
             lhs_attrs = set(self.lhs.nodes(data=True)[node_lhs].keys())
             p_copies = self._rev_p_lhs.get(node_lhs, set())
@@ -216,8 +233,6 @@ class Rule:
                 p_attrs = set(self.p.nodes(data=True)[node_p].keys())
                 if not p_attrs.issubset(lhs_attrs):
                     raise GraphRewriteException(_exception_msgs["add_attrs_in_p_node"](node_p))
-        
-        # Nodes in P do NOT add attributes that aren't in the corresponding Collection node(s).
         for node_lhs in self.collection_mapping:
             lhs_attrs = set(self.collections.nodes(data=True)[node_lhs].keys())
             p_copies = self._rev_p_lhs.get(node_lhs, set())
@@ -225,7 +240,9 @@ class Rule:
                 p_attrs = set(self.p.nodes(data=True)[node_p].keys())
                 if not p_attrs.issubset(lhs_attrs):
                     raise GraphRewriteException(_exception_msgs["add_attrs_in_p_node"](node_p))
-                        
+
+
+        # TODO: The same as above, but with edges instead of nodes.                
         # Edges in P do NOT add attributes that aren't in the corresponding LHS edge(s).
         for s, t in self.lhs.edges():
             rhs_attrs = set(self.lhs.get_edge_data(s, t).keys())
@@ -236,9 +253,7 @@ class Rule:
                     if (s_copy, t_copy) in self.p.edges():
                         p_attrs = set(self.p.get_edge_data(s_copy, t_copy).keys())
                         if not p_attrs.issubset(rhs_attrs):
-                            raise GraphRewriteException(_exception_msgs["add_attrs_in_p_edge"](s_copy, t_copy))
-                        
-        # Edges in P do NOT add attributes that aren't in the corresponding collection edge(s).
+                            raise GraphRewriteException(_exception_msgs["add_attrs_in_p_edge"](s_copy, t_copy))                      
         if self.collections:
             for s, t in self.collections.edges():
                 rhs_attrs = set(self.collections.get_edge_data(s, t).keys())
@@ -250,25 +265,11 @@ class Rule:
                             p_attrs = set(self.p.get_edge_data(s_copy, t_copy).keys())
                             if not p_attrs.issubset(rhs_attrs):
                                 raise GraphRewriteException(_exception_msgs["add_attrs_in_p_edge"](s_copy, t_copy))
-                        
+           
         # Edges in P must have a corresponding LHS edge or a collection edge
         for p_s, p_t in self.p.edges(): 
-            collection_nodes = self.collection_mapping.keys()
-            if p_s in collection_nodes:
-                if p_t in collection_nodes:
-                    for i in range(self.collection_mapping[p_s]):
-                        for j in range(self.collection_mapping[p_t]):
-                            if (self._p_to_lhs[p_s+"_"+i], self._p_to_lhs[p_t+"_"+j]) not in self.lhs.edges():
-                                raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
-                else:
-                    for i in range(self.collection_mapping[p_s]):
-                        if (self._p_to_lhs[p_s+"_"+i], self._p_to_lhs[p_t]) not in self.lhs.edges():
-                                raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
-            elif p_t in collection_nodes:
-                for i in range(self.collection_mapping[p_t]):
-                        if (self._p_to_lhs[p_s], self._p_to_lhs[p_t+"_"+i]) not in self.lhs.edges():
-                                raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
-            elif (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.lhs.edges():
+            if (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.lhs.edges() and self.collections and \
+            (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.collections.edges():
                 raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
         
     def _validate_rhs_p(self):

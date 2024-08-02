@@ -364,7 +364,7 @@ def _log(msg: str, is_log: bool, color: str = _BLACK):
         print(f"{color}{msg}{_BLACK}")
 
 # %% ../nbs/06_transform.ipynb 22
-def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: dict[NodeName, NodeName], collections_input_graph: dict,
+def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: dict[NodeName, NodeName], collections_input_map: dict,
                                 is_log: bool) -> dict[NodeName, NodeName]:
     """Performs the restrictive phase of the rewriting process on some match: Clone nodes, Remove nodes and edges (and/or their attributes).
 
@@ -394,8 +394,8 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         for p_clone in p_clones:
             # Original cloned node is reused in P, preserve it
             if p_clone == cloned_lhs_node:
-                if cloned_lhs_node in collections_input_graph:
-                    for node in collections_input_graph[cloned_lhs_node]:
+                if cloned_lhs_node in collections_input_map:
+                    for node in collections_input_map[cloned_lhs_node]:
                         _log(f"Clone {node}", is_log)
                         p_input_map[p_clone] = node
                     cloned_to_flags_map[cloned_lhs_node] = True
@@ -404,8 +404,8 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
                     cloned_to_flags_map[cloned_lhs_node] = True
                     p_input_map[p_clone] = lhs_input_map[cloned_lhs_node]
             # All other clones require actual cloning (mapped to the new cloned node in input graph)
-            elif cloned_lhs_node in collections_input_graph:
-                for node in collections_input_graph[cloned_lhs_node]:
+            elif cloned_lhs_node in collections_input_map:
+                for node in collections_input_map[cloned_lhs_node]:
                     new_clone_id = _clone_node(input_graph, node)
                     _log(f"Clone {node} as {new_clone_id}", is_log)
                     p_input_map[p_clone] = new_clone_id
@@ -419,6 +419,20 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         For each LHS node, if should be removed - remove it from input.
                             otherwise, if it is not a clone, add to the mapping.
     """
+    # TODO: Here there is a double for loop for lhs and collections, with the only difference being the usage of the lhs_input_map
+    # vs the collections_input_mao. instead, we can find all nodes to remove with this:
+    '''
+    node_sets_to_remove = {
+	collections_input_map[node]
+	if node in collections
+	else set(lhs_input_map[node])
+	for node in nodes_to_remove
+    }
+    nodes_to_remove = set.union(*nodes_sets_to_remove)
+    '''
+    # and find all nodes to save with: nodes_to_save = {node for node in rule.lhs.nodes} | {node for node in rule.collections.nodes}
+    # and then the two for loops would be one to remove all nodes_to_remove, and one to save (the elif in the current for loops) 
+    # all nodes_to_save
     for lhs_node in rule.lhs.nodes():
         # Cloned lhs nodes which weren't reused and so, should be deleted
         if lhs_node in rule.nodes_to_remove() or (lhs_node in cloned_to_flags_map.keys() and cloned_to_flags_map[lhs_node] == False):
@@ -432,14 +446,21 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
     for collection in rule.collection_mapping:
         # Cloned Collection nodes which weren't reused and so, should be deleted
         if collection in rule.nodes_to_remove() or (collection in cloned_to_flags_map.keys() and cloned_to_flags_map[collection] == False):
-            for node in collections_input_graph[collection]:
+            for node in collections_input_map[collection]:
                 _log(f"Remove collection node {node}", is_log)
                 _remove_node(input_graph, node)
         # Else, either a saved cloned node (already preserved) or a regular one (should preserve them)
         elif collection not in cloned_to_flags_map.keys(): 
             p_node = list(rule._rev_p_lhs[collection])[0]
-            p_input_map[p_node] = collections_input_graph[collection]
+            p_input_map[p_node] = collections_input_map[collection]
 
+
+    # TODO: Here, we remove edges, and there are four cases for each edge:
+    # 1. both nodes of the edge are collection nodes - two for loops for the edge
+    # 2+3. one node is a collection node and the other is an lhs node - one for loop for the edge
+    # 4. both nodes of the edge are lhs nodes - one simple removal
+    # need to find a way to make this more elegant - create in a similar manner to above a set of all edges to remove (both lhs
+    # and collection edges) and remove them in a single for loop.
     # Remove edges.
     for lhs_src, lhs_target in rule.edges_to_remove(): 
         if type(p_input_map[lhs_src]) == set:
@@ -462,7 +483,7 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
 
     # Remove node attrs.
     for p_node, attrs_to_remove in rule.node_attrs_to_remove().items():
-        if type(p_input_map[p_node]) == set:
+        if type(p_input_map[p_node]) == set: # then the node represents a collection
             for node in p_input_map[p_node]:
                 _log(f"Remove attrs {attrs_to_remove} from node {node}", is_log)
                 _remove_node_attrs(input_graph, node, attrs_to_remove)
@@ -470,6 +491,7 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
             _log(f"Remove attrs {attrs_to_remove} from node {p_input_map[p_node]}", is_log)
             _remove_node_attrs(input_graph, p_input_map[p_node], attrs_to_remove)
 
+    # TODO: this is the same case of four different cases for each edge as above
     # Remove edge attrs.
     for (p_src, p_target), attrs_to_remove in rule.edge_attrs_to_remove().items(): 
         if type(p_input_map[p_src]) == set:
@@ -534,6 +556,7 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
             p_node = list(rule._rev_p_rhs[rhs_node])[0]
             rhs_input_map[rhs_node] = p_input_map[p_node]
 
+    # TODO: Again, the case of four different cases for each edge
     # Add edges.
     for rhs_src, rhs_target in rule.edges_to_add(): 
         if type(rhs_input_map[rhs_src]) == set:
@@ -556,7 +579,7 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
 
     # Add node attrs.
     for rhs_node, attrs_to_add in rule.node_attrs_to_add().items(): 
-        if type(rhs_input_map[rhs_node]) == set:
+        if type(rhs_input_map[rhs_node]) == set: # The node is a collection
             for node in rhs_input_map[rhs_node]:
                 _log(f"Added attrs {attrs_to_add} to node {node}", is_log)
                 _add_node_attrs(input_graph, node, attrs_to_add)
@@ -564,6 +587,7 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
             _log(f"Added attrs {attrs_to_add} to node {rhs_input_map[rhs_node]}", is_log)
             _add_node_attrs(input_graph, rhs_input_map[rhs_node], attrs_to_add)
 
+    # TODO: And lastly, the case of four cases for each edge
     # Add edge attrs.
     for (rhs_src, rhs_target), attrs_to_add in rule.edge_attrs_to_add().items(): 
         if type(rhs_input_map[rhs_src]) == set:

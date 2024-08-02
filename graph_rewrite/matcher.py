@@ -93,6 +93,9 @@ def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> Tuple[DiGraph,
             graph_edge = (assignment_mapping[edge[0]], assignment_mapping[edge[1]])
             if graph_edge in graph.edges and _attributes_exist(graph.edges[graph_edge], pattern.edges[edge]):
               subg.add_edge(graph_edge[0], graph_edge[1])
+            else: # In that case we don't need to check the rest of the isomorphism
+                break
+                             
         # We only yield mappings for subgraphs that have the same amount of edges as the pattern - otherwise the subgraph won't be an isomorphism
         if len(subg.edges) == len(pattern.edges):
             yield assignment_mapping

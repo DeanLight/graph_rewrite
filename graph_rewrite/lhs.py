@@ -49,6 +49,8 @@ lhs_parser = Lark(r"""
 
     """, parser="lalr", start='patterns' , debug=True)
 
+# TODO: Add the ";" delimiter to the lark grammar - don't think about it on your own, ask Dean
+
 # multi_connection: "-" NATURAL_NUMBER "+" [attributes] "->"  - setting for the "-num+->" feature
 
 # %% ../nbs/01_lhs_parsing.ipynb 11
