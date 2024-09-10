@@ -185,6 +185,10 @@ def find_collection_matches(input_graph: DiGraph, collecions_pattern: DiGraph, i
 
 
 # %% ../nbs/03_matcher.ipynb 23
+# Dean's suggestion: make sure there are no "duplicated mappings" of different node names to the same node - make sure there is no case where
+# one is deleted and the other is not
+# This also should be done for attributes
+# Check how regraph does it, and if there is no such thing, check the mathematically correct way to do it
 def find_matches(input_graph: DiGraph, pattern: DiGraph, collections_pattern: DiGraph = None, condition: FilterFunc = lambda match: True) -> Match:
     """Find all matches of a pattern graph in an input graph, for which a certain condition holds.
     That is, subgraphs of the input graph which have the same nodes, edges, attributes and required attribute values

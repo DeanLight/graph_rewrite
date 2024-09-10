@@ -382,13 +382,30 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
     # Initialize an empty mapping from P nodes to input_graph nodes.
     p_input_map = {}
 
+    #STAV8 - I think this is the best point to create a dictionary: node_mapping, for both lhs and collections nodes 
+    # it will map each node name to the set of nodes it maps to in the input graph
+    # I first add the collections nodes to the dictionary, and then the lhs nodes, just in case there are nodes with the same name (there shouldn't be)
+    
+    # nodes_mapping = {}
+    # for collection_node in rule.collection_mapping:
+    #     for collection_node, input_nodes in collections_input_map.items():
+    #         nodes_mapping[collection_node] = input_nodes
+    # for lhs_node in rule.lhs.nodes():
+    #     nodes_mapping[lhs_node] = set(lhs_input_map[lhs_node])
+
+    #Dean's suggestion to improve: this could be also written in rule.ipynb, and then we can just use the dictionary here
+    nodes_mapping = collections_input_map | {k : {v} for k,v in lhs_input_map.items()}
+
     """Clone nodes:
         Find all LHS nodes that should be cloned (and what are their clones in P).
         For each clone of an LHS node (apart from the first one), add it to the input graph 
         (clone with edges and attributes) and add the pair (clone_name, lhs_node_name) to the p->input mapping.
     """
+
+    #STAV8: Question: I think this can also be simplified by using the dict above - but I'm not sure if I'm missing something
     # Map each cloned lhs node to a flag, denoting whether the original node is reused with the same name in P.
     # If not, the original node will be removed later
+    # Dean's answer - change it
     cloned_to_flags_map = {cloned_lhs_node: False for cloned_lhs_node in rule.nodes_to_clone().keys()}
     for cloned_lhs_node, p_clones in rule.nodes_to_clone().items():
         for p_clone in p_clones:
@@ -414,11 +431,13 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
                 _log(f"Clone {lhs_input_map[cloned_lhs_node]} as {new_clone_id}", is_log)
                 p_input_map[p_clone] = new_clone_id
 
-    """Remove nodes, complete p->input mapping with preserved nodes which are not clones:
+
+    #STAV8: Nadav's comments and old code - my implementation is below
+    '''Remove nodes, complete p->input mapping with preserved nodes which are not clones:
         Find all LHS nodes that should be removed. 
         For each LHS node, if should be removed - remove it from input.
                             otherwise, if it is not a clone, add to the mapping.
-    """
+    '''
     # TODO: Here there is a double for loop for lhs and collections, with the only difference being the usage of the lhs_input_map
     # vs the collections_input_mao. instead, we can find all nodes to remove with this:
     '''
@@ -433,6 +452,8 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
     # and find all nodes to save with: nodes_to_save = {node for node in rule.lhs.nodes} | {node for node in rule.collections.nodes}
     # and then the two for loops would be one to remove all nodes_to_remove, and one to save (the elif in the current for loops) 
     # all nodes_to_save
+
+    
     for lhs_node in rule.lhs.nodes():
         # Cloned lhs nodes which weren't reused and so, should be deleted
         if lhs_node in rule.nodes_to_remove() or (lhs_node in cloned_to_flags_map.keys() and cloned_to_flags_map[lhs_node] == False):
@@ -453,8 +474,33 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         elif collection not in cloned_to_flags_map.keys(): 
             p_node = list(rule._rev_p_lhs[collection])[0]
             p_input_map[p_node] = collections_input_map[collection]
+    
 
+    #STAV8: my implementation:
+    input_nodes_to_remove = set()
+    input_nodes_to_save = set()
 
+    # Cloned nodes which weren't reused and so, should be deleted
+    # Deans suggestion to improve: create a flag that will seld explain if a node should be removed or not
+    # Deans suggestion to improve: in rules.ipynb, we need to already define nodes_to_remove, instead of deciding it here
+    # Also it seems like there are redundant checks that can be simplified
+    if node_name in rule.nodes_to_remove() or (node_name in cloned_to_flags_map.keys() and cloned_to_flags_map[node_name] == False):
+        input_nodes_to_remove.update(input_node for input_node in nodes_mapping[node_name])
+    # Else, either a saved cloned node (already preserved) or a regular one (should preserve them)
+    elif node_name not in cloned_to_flags_map.keys():
+        input_nodes_to_save.update(input_node for input_node in nodes_mapping[node_name])
+    
+    #go over all nodes to remove and remove them   
+    for input_node in input_nodes_to_remove:
+        _log(f"Remove node {input_node}", is_log)
+        _remove_node(input_graph, input_node)
+
+    #go over all nodes to save and add them to the p_input_map 
+    for input_node in input_nodes_to_save:
+            p_node = list(rule._rev_p_lhs[node_name])[0]
+            p_input_map[p_node] = input_node
+
+    #STAV8: Nadav's comments and old code - my implementation is below
     # TODO: Here, we remove edges, and there are four cases for each edge:
     # 1. both nodes of the edge are collection nodes - two for loops for the edge
     # 2+3. one node is a collection node and the other is an lhs node - one for loop for the edge
@@ -462,6 +508,7 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
     # need to find a way to make this more elegant - create in a similar manner to above a set of all edges to remove (both lhs
     # and collection edges) and remove them in a single for loop.
     # Remove edges.
+    '''
     for lhs_src, lhs_target in rule.edges_to_remove(): 
         if type(p_input_map[lhs_src]) == set:
             if type(p_input_map[lhs_target]) == set:
@@ -480,8 +527,25 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         else:
             _log(f"Remove edge ({p_input_map[lhs_src]}, {p_input_map[lhs_target]})", is_log)
             _remove_edge(input_graph, (p_input_map[lhs_src], p_input_map[lhs_target]))
+    '''
 
+    #STAV8: implementation
+    #I create a set of all edges to remove, and then remove all edges in the set of input edges to remove:
+    input_edges_to_remove = set()
+
+    for src_name,dst_name in rule.edges_to_remove():
+        for src_node in nodes_mapping[src_name]:
+            for dst_node in nodes_mapping[dst_name]:
+                input_edges_to_remove.add((src_node, dst_node))
+    
+    for input_edge in input_edges_to_remove:
+        _log(f"Remove edge {input_edge}", is_log)
+        _remove_edge(input_graph, input_edge)
+        
+    
+    #STAV8: Nadav's comments and old code - my implementation is below
     # Remove node attrs.
+    '''
     for p_node, attrs_to_remove in rule.node_attrs_to_remove().items():
         if type(p_input_map[p_node]) == set: # then the node represents a collection
             for node in p_input_map[p_node]:
@@ -490,9 +554,30 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         else:        
             _log(f"Remove attrs {attrs_to_remove} from node {p_input_map[p_node]}", is_log)
             _remove_node_attrs(input_graph, p_input_map[p_node], attrs_to_remove)
+    '''
 
+    #STAV8: my implementation - I'm not sure if this is needed to make sure all attributes to remove are unique
+    #I create a dict with node names to remove attributes from as keys, and a set of the attributes to remove from each as the values
+    # then I remove all attributes
+    # Dean's suggestion to improve: use itertools to simplify (look for product)
+    input_nodes_attrs_to_remove = {}
+
+    for node_name in rule.node_attrs_to_remove().keys():
+        input_nodes_attrs_to_remove[node_name] = {} #initialize the set of attributes to remove for each node
+
+    for node_name, attrs_to_remove in rule.node_attrs_to_remove().items():
+        input_nodes_attrs_to_remove[node_name].update(attrs_to_remove) #that way each node has all the unique attributes to remove
+
+    for input_node, attrs_to_remove in input_nodes_attrs_to_remove.items():
+        for attr in attrs_to_remove:
+            _log(f"Remove attrs {attrs_to_remove} from node {input_node}", is_log)
+            _remove_node_attrs(input_graph, input_node, attrs_to_remove)
+
+
+    #STAV8: Nadav's comments and old code - my implementation is below
     # TODO: this is the same case of four different cases for each edge as above
     # Remove edge attrs.
+    '''
     for (p_src, p_target), attrs_to_remove in rule.edge_attrs_to_remove().items(): 
         if type(p_input_map[p_src]) == set:
             if type(p_input_map[p_target]) == set:
@@ -511,7 +596,24 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         else:
             _log(f"Remove attrs {attrs_to_remove} from edge {(p_input_map[p_src], p_input_map[p_target])}", is_log)
             _remove_edge_attrs(input_graph, (p_input_map[p_src], p_input_map[p_target]), attrs_to_remove)
-            
+    '''
+
+    #STAV8: my implementation - again, not sure if this is needed to make sure all attributes are unique
+    #I create a dict with edge names to remove attributes from as keys, and a set of the attributes to remove from each as the values
+    # then I remove all attributes
+
+    input_edges_attrs_to_remove = {}
+
+    for edge_name in rule.edge_attrs_to_remove().keys():
+        input_edges_attrs_to_remove[edge_name] = {}
+
+    for edge_name, attrs_to_remove in rule.edge_attrs_to_remove().items():
+        input_edges_attrs_to_remove[edge_name].update(attrs_to_remove)
+
+    for input_edge, attrs_to_remove in input_edges_attrs_to_remove.items():
+        for attr in attrs_to_remove:
+            _log(f"Remove attrs {attrs_to_remove} from edge {input_edge}", is_log)
+            _remove_edge_attrs(input_graph, input_edge, attrs_to_remove)
 
     return p_input_map
 
