@@ -90,45 +90,43 @@ class Match:
         self.mapping: Dict[NodeName, Set[NodeName]] = mapping # Node names and edges can represent either single nodes or collections of nodes, so for each node name is mapped to a set of input nodes:
         self.node_type_mapping: Dict[NodeName, NodeType] = node_type_mapping  # A dictionary that maps each node name to its type (single or collection)
     
-    # A function that checks if the node is valid and raises an exception if it is not
-    def check_node_in_pattern(self, pattern_node: NodeName):
+    def _check_node_in_pattern(self, pattern_node: NodeName):
         if not pattern_node in self._nodes:
             raise GraphRewriteException(f"Node {pattern_node} does not exist in the pattern")
         
-    # A function that checks if the edge is valid and raises an exception if it is not
-    def check_edge_in_pattern(self, pattern_src: NodeName, pattern_dst: NodeName):
+    def _check_edge_in_pattern(self, pattern_src: NodeName, pattern_dst: NodeName):
         if not (pattern_src, pattern_dst) in self._edges:
             raise GraphRewriteException(f"Edge {(pattern_src, pattern_dst)} does not exist in the pattern")
         
-             
-    # Two boolean functions that checks if the pattern node is a single node or a collection of nodes
-    def is_collection(self, pattern_node: NodeName) -> bool:
+    def _is_collection(self, pattern_node: NodeName) -> bool:
         return self.node_type_mapping[pattern_node] == NodeType.COLLECTION
 
-    def is_single(self, pattern_node: NodeName) -> bool:
+    def _is_single(self, pattern_node: NodeName) -> bool:
         return self.node_type_mapping[pattern_node] == NodeType.SINGLE
     
     # Returns the node or the collection of nodes mapped to the pattern node
-    # If the node is a single node, we return the single node that is mapped to it, otherwise we return a set of nodes
     def __get_node(self, pattern_node):
-        self.check_node_in_pattern(pattern_node)
-        if self.is_single(pattern_node):
-            return self.graph.nodes[list(self.mapping[pattern_node])[0]]
-        else:
-            return [self.graph.nodes[node] for node in self.mapping[pattern_node]]
+        self._check_node_in_pattern(pattern_node)
+        input_nodes = self.mapping[pattern_node]
+
+        # If there is only one node, return it as a single node
+        if self._is_single(pattern_node):
+            return self.graph.nodes[next(iter(input_nodes))] # Fetches the first element of the set
+        # If there are multiple nodes, return a list of corresponding graph nodes
+        return [self.graph.nodes[input_node] for input_node in input_nodes]
     
     # Returns the edge or the collection of edges mapped to the pattern edge
-    # If the edge is between two single nodes, we return the edge itself, otherwise we return a set of edges
     def __get_edge(self, pattern_src, pattern_dst):
-        self.check_edge_in_pattern(pattern_src, pattern_dst)
-        src = self.mapping[pattern_src]
-        dst = self.mapping[pattern_dst]
-        if self.is_single(pattern_src) and self.is_single(pattern_dst):
-            src_single = list(src)[0]
-            dst_single = list(dst)[0]
-            return self.graph.edges[src_single, dst_single]
-        else:
-            return [self.graph.edges[src, dst] for src in src for dst in dst]
+        self._check_edge_in_pattern(pattern_src, pattern_dst)
+        input_src_nodes = self.mapping[pattern_src]
+        input_dst_nodes = self.mapping[pattern_dst]
+        # If both nodes that define the edge are single, return the single edge
+        if self._is_single(pattern_src) and self._is_single(pattern_dst):
+            single_input_src = next(iter(input_src_nodes))
+            single_input_dst = next(iter(input_dst_nodes))
+            return self.graph.edges[single_input_src, single_input_dst]
+        # If there are multiple nodes (the edge is connected to a collection node), return a list of corresponding graph edges
+        return [self.graph.edges[input_src_node, input_dst_node] for input_src_node, input_dst_node in product(input_src_nodes, input_dst_nodes)]
     
     def nodes(self):
         return {pattern_node: self.__get_node(pattern_node) for pattern_node in self._nodes}        
@@ -168,7 +166,7 @@ class Match:
                 edge_or_edges = self.__get_edge(end_nodes[0], end_nodes[1])
                 
                 # If it's a set of edges, return an EdgeAttributeAccessor, that creates a list of attributes for each edge in the set
-                if self.is_collection(end_nodes[0]) or self.is_collection(end_nodes[1]):
+                if self._is_collection(end_nodes[0]) or self._is_collection(end_nodes[1]):
                     return EdgeAttributeAccessor(edge_or_edges)
                 else: # Single edge
                     return edge_or_edges
@@ -177,7 +175,7 @@ class Match:
             node_or_nodes = self.__get_node(key)
             
             # If the result is a set of nodes, return a NodeAttributeAccessor, that creates a list of attributes for each node in the set
-            if self.is_collection(key):
+            if self._is_collection(key):
                 return NodeAttributeAccessor(node_or_nodes)
             else: # Single node
                 return node_or_nodes
