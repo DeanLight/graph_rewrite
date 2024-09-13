@@ -39,6 +39,8 @@ def is_anonymous_node(node_name: NodeName) -> bool:
     return len(node_name) >= 1 and node_name[0] == '_'
 
 # %% ../nbs/02_match_class.ipynb 16
+# TODO: move all comments to inside the functions and classes using """ (docstrings)
+
 '''
 Classes that are used by Match class
 '''
@@ -88,7 +90,8 @@ class Match:
         self._nodes: List[NodeName] = nodes
         self._edges: List[EdgeName] = edges
         self.mapping: Dict[NodeName, Set[NodeName]] = mapping # Node names and edges can represent either single nodes or collections of nodes, so for each node name is mapped to a set of input nodes:
-        self.node_type_mapping: Dict[NodeName, NodeType] = node_type_mapping  # A dictionary that maps each node name to its type (single or collection)
+        #TODO: add single_nodes (a set of all single nodes)
+        #self.node_type_mapping: Dict[NodeName, NodeType] = node_type_mapping  # A dictionary that maps each node name to its type (single or collection)
     
     def _check_node_in_pattern(self, pattern_node: NodeName):
         if not pattern_node in self._nodes:
@@ -97,10 +100,12 @@ class Match:
     def _check_edge_in_pattern(self, pattern_src: NodeName, pattern_dst: NodeName):
         if not (pattern_src, pattern_dst) in self._edges:
             raise GraphRewriteException(f"Edge {(pattern_src, pattern_dst)} does not exist in the pattern")
-        
+    
+    #TODO: this can be removed if we add single_nodes
     def _is_collection(self, pattern_node: NodeName) -> bool:
         return self.node_type_mapping[pattern_node] == NodeType.COLLECTION
-
+    
+    #TODO: this can be changed if we add single_nodes - it can just check if the node is in single_nodes
     def _is_single(self, pattern_node: NodeName) -> bool:
         return self.node_type_mapping[pattern_node] == NodeType.SINGLE
     
@@ -111,7 +116,7 @@ class Match:
 
         # If there is only one node, return it as a single node
         if self._is_single(pattern_node):
-            return self.graph.nodes[next(iter(input_nodes))] # Fetches the first element of the set
+            return self.graph.nodes[list(input_nodes)[0]]
         # If there are multiple nodes, return a list of corresponding graph nodes
         return [self.graph.nodes[input_node] for input_node in input_nodes]
     
@@ -122,8 +127,8 @@ class Match:
         input_dst_nodes = self.mapping[pattern_dst]
         # If both nodes that define the edge are single, return the single edge
         if self._is_single(pattern_src) and self._is_single(pattern_dst):
-            single_input_src = next(iter(input_src_nodes))
-            single_input_dst = next(iter(input_dst_nodes))
+            single_input_src = list(input_src_nodes)[0]
+            single_input_dst = list(input_dst_nodes)[0]
             return self.graph.edges[single_input_src, single_input_dst]
         # If there are multiple nodes (the edge is connected to a collection node), return a list of corresponding graph edges
         return [self.graph.edges[input_src_node, input_dst_node] for input_src_node, input_dst_node in product(input_src_nodes, input_dst_nodes)]
