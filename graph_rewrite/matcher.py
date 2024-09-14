@@ -24,14 +24,11 @@ from .match_class import Match, mapping_to_match, is_anonymous_node,draw_match
 
 # TODO: Email Dean regarding the parser ability to support constant values in the pattern graph - it is currently not supported, and so all constant values will still
 #  result in a None value in the pattern graph.
-
-# This class is used to represent a constant value in the pattern graph (e.g., a[id=3]).
-# It helps differentiate between constant values and values that are dependent on runtime (e.g., when using conditions while creating the LHS).
 class Constant:
     def __init__(self, value):
         self.value = value
 
-# Helper function to compare pattern attributes (node or edge) with input attributes
+
 def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
     """
     Check if the input attributes match the pattern attributes.
@@ -54,7 +51,8 @@ def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
         if attr_value is None: # If the attribute exists, but the value is None, continue to the next attribute
             continue
 
-        # TODO: This is not supported yet due to the parser not supporting constant values in the pattern graph - we will never reach this point, and it is implemented for future use, once the parser supports it.
+        # TODO: This is not supported yet due to the parser not supporting constant values in the pattern graph - we will never reach this point, and it is implemented for future use, 
+        # once the parser supports it.
         if isinstance(attr_value, Constant):  # If the attribute exists, and the value is a constant, check if the value matches
             if input_attrs[attr_name] != attr_value.value:
                 return False
@@ -62,60 +60,7 @@ def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
     return True
 
 # %% ../nbs/03_matcher.ipynb 12
-def _filter_candidates_by_edges(pattern: DiGraph, input_graph: DiGraph, pattern_node: NodeName, candidate_input_nodes: Set[NodeName]) -> Set[NodeName]:
-    """
-    Helper function for _find_input_nodes_with_pattern_attributes_and_edges.
-    Further filters the candidate input nodes by checking if their edges match the pattern node's edges by attributes.
-    The function first collects all edges of the pattern node that have attributes specified and then filters out
-    the candidates that don't have at least one unique matching edge for each pattern edge.
-
-    Args:
-        pattern (DiGraph): The pattern graph.
-        input_graph (DiGraph): The input graph.
-        pattern_node (NodeName): The pattern node.
-        candidate_input_nodes (Set[NodeName]): A set of candidate input nodes that already match the node attributes.
-
-    Returns:
-        Set[NodeName]: A filtered set of candidate input nodes that also have matching unique edges.
-    """
-    pattern_edges_with_attrs = [
-        (pattern_node, pattern_neighbor, pattern.get_edge_data(pattern_node, pattern_neighbor))
-        for pattern_neighbor in pattern.neighbors(pattern_node)
-        if pattern.get_edge_data(pattern_node, pattern_neighbor)  # Only edges with attributes
-    ]
-
-    if not pattern_edges_with_attrs:
-        return candidate_input_nodes
-
-    filtered_candidates = set()
-
-    for input_node in candidate_input_nodes:
-        unused_input_edges = {(input_node, input_neighbor) for input_neighbor in input_graph.neighbors(input_node)}
-
-        valid_candidate = True  # Assume valid unless proven otherwise
-
-        for _, _, pattern_edge_attrs in pattern_edges_with_attrs:
-            match_found = False
-
-            for input_edge in list(unused_input_edges):
-                input_edge_attrs = input_graph.get_edge_data(*input_edge, default={})
-
-                if _attributes_match(pattern_edge_attrs, input_edge_attrs):
-                    unused_input_edges.remove(input_edge)
-                    match_found = True
-                    break
-
-            if not match_found:
-                valid_candidate = False
-                break
-
-        if valid_candidate:
-            filtered_candidates.add(input_node)
-
-    return filtered_candidates
-
-# %% ../nbs/03_matcher.ipynb 13
-def _find_input_nodes_candidates_for_pattern_node(pattern_node: NodeName, pattern: DiGraph, input_graph: DiGraph) -> set[NodeName]:
+def _find_input_nodes_candidates(pattern_node: NodeName, pattern: DiGraph, input_graph: DiGraph) -> set[NodeName]:
     """
     Given a pattern node and an input graph, return a set of input graph nodes that:
     - Contain the required attributes of the pattern node, including constant value checks (if specified) and existence checks (if no value is specified / no constant value).
@@ -145,12 +90,65 @@ def _find_input_nodes_candidates_for_pattern_node(pattern_node: NodeName, patter
         if _attributes_match(pattern_node_attrs, input_graph.nodes[input_node])
     }
 
-    # Further filter candidate nodes by checking if they have matching edges
-    return _filter_candidates_by_edges(pattern, input_graph, pattern_node, candidate_nodes)
+    return candidate_nodes
+
+# %% ../nbs/03_matcher.ipynb 13
+def _filter_edge_candidates(input_graph: DiGraph, pattern: DiGraph, src_pattern_node: NodeName, dst_pattern_node: NodeName, 
+                               src_candidates: Set[NodeName], dst_candidates: Set[NodeName]) -> Set[Tuple[NodeName, NodeName]]:
+    """
+    Filter the input node candidates for two pattern nodes by checking if the edges between them in the input graph exist
+    and match the pattern edge attributes.
+
+    This function reduces the number of candidate pairs before generating assignments in _find_pattern_based_matches.
+
+    Args:
+        input_graph (DiGraph): The input graph.
+        pattern (DiGraph): The pattern graph (provides the edge attributes).
+        src_pattern_node (NodeName): The source pattern node.
+        dst_pattern_node (NodeName): The destination pattern node.
+        src_candidates (Set[NodeName]): Current candidates for the source pattern node.
+        dst_candidates (Set[NodeName]): Current candidates for the destination pattern node.
+
+    Returns:
+        Set[Tuple[NodeName, NodeName]]: A set of valid candidate edge assignments (source, destination).
+    """
+    pattern_edge_attrs = pattern.get_edge_data(src_pattern_node, dst_pattern_node, default={})
+
+    # Filter input edge candidates for the pattern edge by checking if the input edge exists and matches the pattern edge attributes (if specified)
+    valid_edge_candidates = {
+        (src_candidate, dst_candidate)
+        for src_candidate, dst_candidate in product(src_candidates, dst_candidates)
+        if (src_candidate, dst_candidate) in input_graph.edges and
+           _attributes_match(pattern_edge_attrs, input_graph.get_edge_data(src_candidate, dst_candidate, default={}))
+    }
+
+    return valid_edge_candidates
 
 # %% ../nbs/03_matcher.ipynb 15
-# TODO: maybe we should change the name of this function to something more descriptive, that includes attributes
-def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> Iterator[Tuple[DiGraph, Dict[NodeName, NodeName]]]:
+def _can_add_edge_candidates_to_assignment(src_candidate, dst_candidate, partial_assignment, src_pattern_node, dst_pattern_node):
+    """
+    Helper function to check if a pair of candidate nodes for an edge can be added to a partial assignment
+    without conflicting with the existing node assignments.
+
+    Args:
+        src_candidate (NodeName): Candidate for the source pattern node.
+        dst_candidate (NodeName): Candidate for the destination pattern node.
+        partial_assignment (dict): Current partial assignment mapping pattern nodes to input nodes.
+        src_pattern_node (NodeName): The source pattern node in the pattern graph.
+        dst_pattern_node (NodeName): The destination pattern node in the pattern graph.
+
+    Returns:
+        bool: True if the edge candidates can be added without conflict to the current assignment, False otherwise.
+    """
+    return (
+        src_candidate not in partial_assignment.values() and
+        dst_candidate not in partial_assignment.values() and
+        (src_pattern_node not in partial_assignment or partial_assignment[src_pattern_node] == src_candidate) and
+        (dst_pattern_node not in partial_assignment or partial_assignment[dst_pattern_node] == dst_candidate)
+    )
+
+# %% ../nbs/03_matcher.ipynb 16
+def _find_pattern_based_matches(graph: DiGraph, pattern: DiGraph) -> Iterator[Tuple[DiGraph, Dict[NodeName, NodeName]]]:
     """
     Find all subgraphs in the input graph that match the given pattern graph based on both structure (nodes and edges)
     and attributes (existence of attributes or constant value checks).
@@ -167,75 +165,62 @@ def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> Iterator[Tuple
         where subgraph is the matched subgraph, and mapping is a dictionary mapping nodes in the
         subgraph to nodes in the pattern.
     """
-    p_nodes = list(pattern.nodes)
-    p_edges = list(pattern.edges)
+    
+    single_pattern_nodes = [n for n in pattern.nodes if pattern.in_degree(n) == 0 and pattern.out_degree(n) == 0]
+    single_pattern_nodes_to_input_candidates = {n: _find_input_nodes_candidates(n, pattern, graph) for n in single_pattern_nodes}
 
-    pattern_to_input_nodes_candidates = {
-        pattern_node: _find_input_nodes_candidates_for_pattern_node(pattern_node, pattern, graph)
-        for pattern_node in p_nodes
-    }
+    edge_candidates = {}
 
-    # All valid combinations of candidate node assignments (combinations won't work here since we want to ensure each pattern node is mapped to a unique input node)
-    candidate_assignments = product(
-        *(pattern_to_input_nodes_candidates[pattern_node] for pattern_node in p_nodes)
-    )
+    for src_pattern_node, dst_pattern_node in pattern.edges:
+        src_candidates = _find_input_nodes_candidates(src_pattern_node, pattern, graph)
+        dst_candidates = _find_input_nodes_candidates(dst_pattern_node, pattern, graph)
+        edge_candidates[(src_pattern_node, dst_pattern_node)] = _filter_edge_candidates(graph, pattern, src_pattern_node, dst_pattern_node, src_candidates, dst_candidates)
 
-    # Find isomorphic subgraphs
-    for assignment in candidate_assignments:
-        if len(set(assignment)) != len(assignment): # Ensure all input nodes are unique
-            continue
+    # Generate partial assignments based on valid edge candidates
+    partial_assignments = set()
 
-        nodes_assignment_mapping = dict(zip(p_nodes, assignment))
+    for (src_pattern_node, dst_pattern_node), valid_edge_candidates in edge_candidates.items():
+        new_assignments = set()
 
-        subgraph = DiGraph()
-        subgraph.add_nodes_from(assignment)
+        for src_candidate, dst_candidate in valid_edge_candidates:
+            for partial_assignment in partial_assignments or [{}]:
+                if _can_add_edge_candidates_to_assignment(src_candidate, dst_candidate, partial_assignment, src_pattern_node, dst_pattern_node):
+                    new_assignment = partial_assignment.copy()
+                    new_assignment[src_pattern_node] = src_candidate
+                    new_assignment[dst_pattern_node] = dst_candidate
+                    new_assignments.add(frozenset(new_assignment.items())) # ensuring that once a partial assignment is created, it can't be altered accidentally in subsequent steps - the goal is to maintain a set of unique assignments
 
-        # Validate edges based on node mapping
-        for pattern_src, pattern_dst in p_edges:
-            input_src, input_dst = nodes_assignment_mapping[pattern_src], nodes_assignment_mapping[pattern_dst]
-
-            if (input_src, input_dst) in graph.edges and _attributes_match(
-                pattern.get_edge_data(pattern_src, pattern_dst, default={}),
-                graph.get_edge_data(input_src, input_dst, default={})
-            ):
-                subgraph.add_edge(input_src, input_dst)
-            else:
-                # If the edge does not match, skip this candidate
-                break
-        else:
-            # If all edges are validated, check the isomorphism
-            if len(subgraph.edges) == len(p_edges) and isomorphism.is_isomorphic(subgraph, pattern):
-                yield subgraph, nodes_assignment_mapping
-
-#OLD    
-'''
-    # We find all possible candidates for each node in the pattern, by checking the attributes of the nodes in the graph
-    pattern_to_input_candidates = {pattern_node: _find_input_nodes_with_pattern_attributes(pattern.nodes[pattern_node], graph) for pattern_node in pattern.nodes}
-    candidate_assignments = itertools.product(*(pattern_to_input_candidates[pattern_node] for pattern_node in list(pattern.nodes)))
-    for assignment in candidate_assignments:
-        # Make sure the sub_nodes are unique - we don't want to have multiple nodes in the subgraph that are mapped to the same node in the pattern
-        if len(set(assignment)) != len(assignment): 
-            continue
-        assignment_mapping = dict(zip(list(pattern.nodes), assignment))
-        subg = DiGraph()
-        subg.add_nodes_from(list(assignment))
-        for pattern_edge in list(pattern.edges):
-            graph_edge = (assignment_mapping[pattern_edge[0]], assignment_mapping[pattern_edge[1]])
-            if graph_edge in graph.edges and _input_node_has_pattern_node_attributes(graph.edges[graph_edge], pattern.edges[edge]):
-              subg.add_edge(graph_edge[0], graph_edge[1])
-            else: # In that case we don't need to check the rest of the isomorphism
-                break
-                             
-        # We only yield mappings for subgraphs that have the same amount of edges as the pattern - otherwise the subgraph won't be an isomorphism
-        if len(subg.edges) == len(pattern.edges):
-            yield assignment_mapping
-'''
+        if not new_assignments: # If no new assignments are found for a pair of pattern nodes, it means that the pattern cannot be matched
+            return
+        partial_assignments = new_assignments
 
 
-# %% ../nbs/03_matcher.ipynb 17
+    # Add single node candidates to the assignments
+    for pattern_node in single_pattern_nodes:
+        single_node_candidates = single_pattern_nodes_to_input_candidates[pattern_node]
+        new_assignments = set()
+
+        for candidate in single_node_candidates:
+            for partial_assignment in partial_assignments or [{}]:
+                if candidate not in dict(partial_assignment).values():
+                    new_assignment = dict(partial_assignment).copy()
+                    new_assignment[pattern_node] = candidate
+                    new_assignments.add(frozenset(new_assignment.items())) # again, ensuring that the assignment is unique and can't be altered accidentally in subsequent steps
+
+        partial_assignments = new_assignments
+
+    # Filter and yield valid subgraphs (at this point we have all possible assignments, and there shouldn't be any non-isomorphic subgraphs - I kept the check for safety) 
+    for assignment in partial_assignments:
+        assignment_dict = dict(assignment)
+        subgraph = graph.subgraph(assignment_dict.values())
+
+        if isomorphism.is_isomorphic(subgraph, pattern, node_match=_attributes_match, edge_match=_attributes_match):
+            yield subgraph, assignment_dict
+
+# %% ../nbs/03_matcher.ipynb 19
 FilterFunc = Callable[[Match], bool]
 
-# %% ../nbs/03_matcher.ipynb 20
+# %% ../nbs/03_matcher.ipynb 22
 def _filter_duplicated_matches(matches: list[Match]) -> Iterator[Match]:
     """Remove duplicates from a list of Matches, based on their mappings. Return an iterator of the matches without duplications.
 
@@ -260,7 +245,7 @@ def _filter_duplicated_matches(matches: list[Match]) -> Iterator[Match]:
 
 
 
-# %% ../nbs/03_matcher.ipynb 21
+# %% ../nbs/03_matcher.ipynb 23
 # Finds 
 def find_intersecting_nodes(match: dict, collection_pattern: DiGraph) -> set:
     # Step 1: Extract all node names from self._nodes and the node collections (if they do not exist yet, they will be empty - no harm is done).
@@ -299,7 +284,7 @@ def find_collection_matches(input_graph: DiGraph, collecions_pattern: DiGraph, i
 
 
 
-# %% ../nbs/03_matcher.ipynb 23
+# %% ../nbs/03_matcher.ipynb 25
 # Dean's suggestion: make sure there are no "duplicated mappings" of different node names to the same node - make sure there is no case where
 # one is deleted and the other is not
 # This also should be done for attributes
@@ -347,7 +332,4 @@ def find_matches(input_graph: DiGraph, pattern: DiGraph, collections_pattern: Di
     # Then filter the list, to contain only the filtered match whose unfiltered version matches the condition
     filtered_matches =  [filtered_match for (unfiltered_match, filtered_match) in matches_list if condition(unfiltered_match)]
     # And finally, remove duplicates (might be created because we removed the anonymous nodes)
-    yield from _remove_duplicated_matches(filtered_matches)
-
-
-
+    yield from _filter_duplicated_matches(filtered_matches)
