@@ -352,20 +352,22 @@ def find_matches(input_graph: DiGraph, exact_match_pattern: DiGraph, collections
     if collections_pattern:
         intersecting_pattern_nodes = _find_intersecting_pattern_nodes(exact_match_pattern, collections_pattern)
         updated_matches_with_collections = _add_collections_to_exact_matches(input_graph, collections_pattern, exact_matches, intersecting_pattern_nodes)
-        non_intersecting_collection_nodes = set(collections_pattern.nodes) - intersecting_pattern_nodes
     else:
         #TODO: verify this
         # If no collections, we proceed with exact matches only, we just move it to the correct format of the updated_matches_with_collections
         updated_matches_with_collections = [{pattern_node: {input_node} for pattern_node, input_node in exact_match.items()} 
                                             for exact_match in exact_matches]
-        non_intersecting_collection_nodes = set()
+
+    exact_pattern_nodes = set(exact_match_pattern.nodes)
 
     # TODO: verify this
-    pattern_nodes = set(exact_match_pattern.nodes) | set(collections_pattern.nodes)
-    pattern_edges = set(exact_match_pattern.edges) | set(collections_pattern.edges)
+    pattern_nodes = set(exact_pattern_nodes) | set(collections_pattern.nodes)
+    pattern_edges = set(collections_pattern.edges) | set(exact_match_pattern.edges)
 
-    matches_with_filtered_versions = [(mapping_to_match(input_graph, pattern_nodes, pattern_edges, mapping, non_intersecting_collection_nodes, filter=True),
-                                       mapping_to_match(input_graph, pattern_nodes, pattern_edges, mapping, non_intersecting_collection_nodes, filter=True))
+    # Generate matches with and without filtering out anonymous nodes.
+    # TODO: ask Dean about the anonymous nodes
+    matches_with_filtered_versions = [(mapping_to_match(input_graph, pattern_nodes, pattern_edges, mapping, exact_pattern_nodes, filter=False),
+                                       mapping_to_match(input_graph, pattern_nodes, pattern_edges, mapping, exact_pattern_nodes))
                                        for mapping in updated_matches_with_collections]
     
     # Filter matches using the provided condition function, based on the unfiltered match.
