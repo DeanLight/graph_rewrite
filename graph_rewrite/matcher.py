@@ -3,7 +3,7 @@
 # %% auto 0
 __all__ = ['FilterFunc', 'Constant']
 
-# %% ../nbs/03_matcher.ipynb 6
+# %% ../nbs/03_matcher.ipynb 5
 from typing import *
 from networkx import DiGraph
 from networkx.algorithms import isomorphism # check subgraph's isom.
@@ -13,7 +13,7 @@ from .match_class import Match, mapping_to_match, is_anonymous_node,draw_match
 from itertools import product, permutations
 from typing import Tuple, Iterator
 
-# %% ../nbs/03_matcher.ipynb 9
+# %% ../nbs/03_matcher.ipynb 8
 # TODO: Ensure we separate between constant attributes and existence checks (constants).
 # a[id] -> existence check (can be checked before combinatorics)
 # a[id=Constant(3)] -> constant value check (can be checked before combinatorics)
@@ -55,7 +55,7 @@ def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
 
     return True
 
-# %% ../nbs/03_matcher.ipynb 11
+# %% ../nbs/03_matcher.ipynb 10
 def _find_input_nodes_candidates(pattern_node: NodeName, pattern: DiGraph, input_graph: DiGraph) -> set[NodeName]:
     """
     Given a pattern node and an input graph, return a set of input graph nodes that:
@@ -73,7 +73,7 @@ def _find_input_nodes_candidates(pattern_node: NodeName, pattern: DiGraph, input
 
     pattern_node_attrs = pattern.nodes[pattern_node]
 
-    if "_id" in pattern_node_attrs: #TODO: understand why this is here (_id)
+    if "_id" in pattern_node_attrs:
         input_node_id = pattern_node_attrs.pop("_id")
         input_nodes_to_check = [input_node_id]
     else:
@@ -88,14 +88,46 @@ def _find_input_nodes_candidates(pattern_node: NodeName, pattern: DiGraph, input
 
     return candidate_nodes
 
+# %% ../nbs/03_matcher.ipynb 11
+# Helper function to check if an input edge matches the pattern edge
+def _is_valid_edge_candidate(input_graph: DiGraph, pattern_edge_attrs: dict, 
+                   src_candidate: NodeName, dst_candidate: NodeName, 
+                   src_pattern_node: NodeName, dst_pattern_node: NodeName) -> bool:
+    """
+    Check if an edge between two input nodes matches the pattern edge and attributes.
+
+    Args:
+        input_graph (DiGraph): The input graph.
+        pattern_edge_attrs (dict): Attributes of the pattern edge to match.
+        src_candidate (NodeName): The source candidate node in the input graph.
+        dst_candidate (NodeName): The destination candidate node in the input graph.
+        src_pattern_node (NodeName): The source pattern node.
+        dst_pattern_node (NodeName): The destination pattern node.
+
+    Returns:
+        bool: True if the input edge is valid, False otherwise.
+    """
+    if (src_candidate, dst_candidate) not in input_graph.edges:
+        return False
+
+    input_edge_attrs = input_graph.get_edge_data(src_candidate, dst_candidate, default={})
+    if not _attributes_match(pattern_edge_attrs, input_edge_attrs):
+        return False
+
+    # Special case: If the source and destination are the same node in the pattern,
+    # ensure the source and destination candidates are also the same in the input graph
+    if src_pattern_node == dst_pattern_node and src_candidate != dst_candidate:
+        return False
+
+    return True
+
 # %% ../nbs/03_matcher.ipynb 12
-def _filter_edge_candidates(input_graph: DiGraph, pattern: DiGraph, src_pattern_node: NodeName, dst_pattern_node: NodeName, 
-                               src_candidates: Set[NodeName], dst_candidates: Set[NodeName]) -> Set[Tuple[NodeName, NodeName]]:
+def _filter_edge_candidates(input_graph: DiGraph, pattern: DiGraph, 
+                            src_pattern_node: NodeName, dst_pattern_node: NodeName, 
+                            src_candidates: Set[NodeName], dst_candidates: Set[NodeName]) -> Set[Tuple[NodeName, NodeName]]:
     """
     Filter the input node candidates for two pattern nodes by checking if the edges between them in the input graph exist
     and match the pattern edge attributes.
-
-    This function reduces the number of candidate pairs before generating assignments in _find_pattern_based_matches.
 
     Args:
         input_graph (DiGraph): The input graph.
@@ -108,25 +140,118 @@ def _filter_edge_candidates(input_graph: DiGraph, pattern: DiGraph, src_pattern_
     Returns:
         Set[Tuple[NodeName, NodeName]]: A set of valid candidate edge assignments (source, destination).
     """
+
     pattern_edge_attrs = pattern.get_edge_data(src_pattern_node, dst_pattern_node, default={})
 
-    # Filter input edge candidates for the pattern edge by checking if the input edge exists and matches the pattern edge attributes (if specified)
     valid_edge_candidates = {
         (src_candidate, dst_candidate)
         for src_candidate, dst_candidate in product(src_candidates, dst_candidates)
-        if (src_candidate, dst_candidate) in input_graph.edges and
-           _attributes_match(pattern_edge_attrs, input_graph.get_edge_data(src_candidate, dst_candidate, default={})) and
-           ((src_pattern_node==dst_pattern_node and src_candidate==dst_candidate) or src_pattern_node!=dst_pattern_node) 
+        if _is_valid_edge_candidate(input_graph, pattern_edge_attrs, src_candidate, dst_candidate, src_pattern_node, dst_pattern_node)
     }
 
     return valid_edge_candidates
 
+
 # %% ../nbs/03_matcher.ipynb 14
-def _add_candidates_to_assignment(src_candidate: NodeName, dst_candidate: NodeName, partial_assignment: Dict[NodeName, NodeName], 
-                                  src_pattern_node: NodeName, dst_pattern_node: NodeName) -> Optional[Dict[NodeName, NodeName]]:
+def _extend_assignments_with_nodes(pattern_nodes_mapped_to_candidates, partial_assignments: List[Dict[NodeName, NodeName]], input_graph: DiGraph) -> List[Dict[NodeName, NodeName]]:
     """
-    Helper function to handle the case of adding src and dst candidates to the partial assignment
-    based on different conditions (both unassigned, one already assigned correctly, etc.).
+    Extend the partial assignments with nodes that have not been assigned yet, ensuring that each input node is only
+    assigned once across the assignment, while respecting the filtered candidates for each pattern node.
+
+    Args:
+        pattern_nodes_mapped_to_candidates (Dict[NodeName, Set[NodeName]]): Dictionary mapping each unassigned pattern node 
+                                                                            to its set of candidate input nodes.
+        partial_assignments (List[Dict[NodeName, NodeName]]): List of current partial assignments.
+        input_graph (DiGraph): The input graph.
+
+    Returns:
+        List[Dict[NodeName, NodeName]]: The partial assignments extended with nodes.
+    """
+    extended_assignments = []
+
+    for partial_assignment in partial_assignments:
+        unused_input_nodes = set(input_graph.nodes) - set(partial_assignment.values())
+        filtered_candidates = {}
+        for pattern_node, candidates in pattern_nodes_mapped_to_candidates.items():
+            filtered_candidates[pattern_node] = candidates & unused_input_nodes
+
+        current_assignments = [partial_assignment]
+
+        # Iterate over each unassigned pattern node and extand the current partial_assignment to multiple partial assignments
+        # where each one has a different candidate for this node
+        for pattern_node in filtered_candidates.keys():
+            new_assignments = []
+            for assignment in current_assignments:
+                # Ensure uniqueness by finding unused candidates for the current node
+                unused_candidates = unused_input_nodes - set(assignment.values())
+                possible_candidates = filtered_candidates[pattern_node] & unused_candidates
+                # Extend assignment with all possible candidates
+                for candidate in possible_candidates:
+                    new_assignment = assignment.copy()
+                    new_assignment[pattern_node] = candidate
+                    new_assignments.append(new_assignment)
+            current_assignments = new_assignments
+
+        # Add the extended assignments for this partial assignment
+        extended_assignments.extend(current_assignments)
+
+    return extended_assignments
+
+# %% ../nbs/03_matcher.ipynb 15
+def _extend_assignments_with_edges(pattern_edges, partial_assignments, pattern, graph, is_self_loop=False):
+    """
+    Extend the partial assignments with valid edge candidates.
+
+    Args:
+        pattern_edges: The edges of the pattern graph.
+        partial_assignments: The current partial assignments.
+        pattern: The pattern graph.
+        graph: The input graph.
+        is_self_loop: Whether the pattern edge is a self-loop or not.
+
+    Returns:
+        List[Dict[NodeName, NodeName]]: A list of extended assignments.
+
+    """
+    edge_candidates = {}
+
+    if is_self_loop:
+        src_pattern_node, dst_pattern_node = pattern_edges[0]
+        src_candidates = _find_input_nodes_candidates(src_pattern_node, pattern, graph)
+        dst_candidates = src_candidates  # For self-loops, src and dst candidates are the same
+    else:
+        for src_pattern_node, dst_pattern_node in pattern_edges:
+            src_candidates = _find_input_nodes_candidates(src_pattern_node, pattern, graph)
+            dst_candidates = _find_input_nodes_candidates(dst_pattern_node, pattern, graph)
+        
+        edge_candidates[(src_pattern_node, dst_pattern_node)] = _filter_edge_candidates(
+            graph, pattern, src_pattern_node, dst_pattern_node, src_candidates, dst_candidates)
+
+    # Prepare a new list of assignments to avoid modifying the list during iteration
+    new_partial_assignments = []
+
+    # Extend assignments by iterating over valid edge candidates
+    for (src_pattern_node, dst_pattern_node) in edge_candidates.keys():        
+        for partial_assignment in partial_assignments:
+            partial_assignment_extensions = []
+            for src_candidate, dst_candidate in edge_candidates[(src_pattern_node, dst_pattern_node)]:
+                extended_assignment = _try_extending_assignment_with_edge_candidate(
+                    src_candidate, dst_candidate, partial_assignment, src_pattern_node, dst_pattern_node)
+                
+                if extended_assignment is not None and extended_assignment not in partial_assignment_extensions:
+                    partial_assignment_extensions.append(extended_assignment)
+            
+            if partial_assignment_extensions:  # Only add assignments that could be extended
+                new_partial_assignments.extend(partial_assignment_extensions)
+
+    # Return the newly created assignments with edges
+    return new_partial_assignments
+
+#| export
+def _try_extending_assignment_with_edge_candidate(src_candidate: NodeName, dst_candidate: NodeName, partial_assignment: Dict[NodeName, NodeName], 
+                                            src_pattern_node: NodeName, dst_pattern_node: NodeName) -> Optional[Dict[NodeName, NodeName]]:
+    """
+    Extend the current partial assignment by adding the given src and dst candidates, if possible.
 
     Args:
         src_candidate: The candidate for the source pattern node.
@@ -138,139 +263,136 @@ def _add_candidates_to_assignment(src_candidate: NodeName, dst_candidate: NodeNa
     Returns:
         A dictionary representing the new assignment if valid, or None if it doesn't apply.
     """
-    # Copy the partial assignment to avoid modifying the original
-    new_assignment = {pattern_node : input_node for pattern_node, input_node in partial_assignment.items()}
+    new_assignment = partial_assignment.copy()
+    assigned_pattern_nodes = set(new_assignment.keys())
+    used_candidates = set(new_assignment.values())
 
-    src_assigned = src_candidate in partial_assignment.values()
-    dst_assigned = dst_candidate in partial_assignment.values()
+    # Check if the source and destination nodes are already assigned to different nodes
+    if src_pattern_node in assigned_pattern_nodes and new_assignment[src_pattern_node] != src_candidate:
+        return None
 
-    # Case 1: Neither src nor dst are assigned, add both
-    if not src_assigned and not dst_assigned:
-        new_assignment[src_pattern_node] = src_candidate
-        new_assignment[dst_pattern_node] = dst_candidate
-        return new_assignment
+    if dst_pattern_node in assigned_pattern_nodes and new_assignment[dst_pattern_node] != dst_candidate:
+        return None
 
-    # Case 2: src is already correctly assigned, add dst
-    elif src_assigned and partial_assignment.get(src_pattern_node) == src_candidate and not dst_assigned:
-        new_assignment[dst_pattern_node] = dst_candidate
-        return new_assignment
+    # Handle self-loop edges
+    if src_pattern_node == dst_pattern_node:
+        if src_candidate == dst_candidate:
+            new_assignment[src_pattern_node] = src_candidate
+            return new_assignment
+        else:
+            return None
 
-    # Case 3: dst is already correctly assigned, add src
-    elif dst_assigned and partial_assignment.get(dst_pattern_node) == dst_candidate and not src_assigned:
-        new_assignment[src_pattern_node] = src_candidate
-        return new_assignment
-    
-    # Case 4: src and dst are the same, and the edge is a self-loop
-    elif src_assigned and dst_assigned and partial_assignment.get(src_pattern_node) == src_candidate and partial_assignment.get(dst_pattern_node) == dst_candidate:
-        return new_assignment
+    # The edge is not a self-loop, so src and dst candidates must be different
+    if src_candidate == dst_candidate:
+        return None
+
+    # Case 1: Both src and dst nodes are not assigned, and the candidates are not used, assign them
+    if src_pattern_node not in assigned_pattern_nodes and dst_pattern_node not in assigned_pattern_nodes:
+        if src_candidate not in used_candidates and dst_candidate not in used_candidates:
+            new_assignment[src_pattern_node] = src_candidate
+            new_assignment[dst_pattern_node] = dst_candidate
+            return new_assignment
+        else:
+            return None
+
+    # Case 2: If the pattern src node is assigned with the input src candidate, but the dst node is not assigned, 
+    # and the dst candidate is not used, assign them
+    if src_pattern_node in assigned_pattern_nodes and new_assignment[src_pattern_node] == src_candidate:
+        if dst_pattern_node not in assigned_pattern_nodes and dst_candidate not in used_candidates:
+            new_assignment[dst_pattern_node] = dst_candidate
+            return new_assignment
+        else:
+            return None
+
+    # Case 3: If the pattern dst node is assigned with the input dst candidate, but the src node is not assigned,
+    # and the src candidate is not used, assign them
+    if dst_pattern_node in assigned_pattern_nodes and new_assignment[dst_pattern_node] == dst_candidate:
+        if src_pattern_node not in assigned_pattern_nodes and src_candidate not in used_candidates:
+            new_assignment[src_pattern_node] = src_candidate
+            return new_assignment
+        else:
+            return None
 
     return None  # No valid assignment if none of the cases match
 
-
-# %% ../nbs/03_matcher.ipynb 15
+# %% ../nbs/03_matcher.ipynb 16
 def _find_pattern_based_matches(graph: DiGraph, pattern: DiGraph) -> Iterator[Tuple[DiGraph, Dict[NodeName, NodeName]]]:
     """
     Find all subgraphs in the input graph that match the given pattern graph based on both structure (nodes and edges)
     and attributes (existence of attributes or constant value checks).
-
-    A subgraph is considered isomorphic if it has the same structure (nodes and edges) as the pattern graph
-    and the attributes of the nodes and edges match the specified attributes in the pattern graph.
-
+    
     Args:
         graph (DiGraph): The graph to search for matches.
         pattern (DiGraph): The pattern graph representing the structure and attributes to match.
-
+    
     Yields:
         Iterator[Tuple[DiGraph, Dict[NodeName, NodeName]]]: Tuples of (subgraph, mapping),
         where subgraph is the matched subgraph, and mapping is a dictionary mapping nodes in the
         subgraph to nodes in the pattern.
     """
 
-    # For pattern edges, gather valid edge candidates (pairs of nodes with matching attributes)
-    edge_candidates = {}
-    for src_pattern_node, dst_pattern_node in pattern.edges:
-        src_candidates = _find_input_nodes_candidates(src_pattern_node, pattern, graph)
-        dst_candidates = _find_input_nodes_candidates(dst_pattern_node, pattern, graph)
-        edge_candidates[(src_pattern_node, dst_pattern_node)] = _filter_edge_candidates(
-            graph, pattern, src_pattern_node, dst_pattern_node, src_candidates, dst_candidates)
+    # Separate self-loops from non-self-loop edges in the pattern
+    self_loop_pattern_edges = [(src, dst) for src, dst in pattern.edges if src == dst]
+    non_self_loop_pattern_edges = [(src, dst) for src, dst in pattern.edges if src != dst]
+
+    partial_assignments = [{}]  # Initialize with an empty assignment
+
+    # Step 1: Handle self-loops first, if they exist
+    if self_loop_pattern_edges:
+        self_loop_pattern_nodes = set(src for src, _ in self_loop_pattern_edges)
+        self_loop_nodes_candidates = {node: _find_input_nodes_candidates(node, pattern, graph) for node in self_loop_pattern_nodes}
+        node_candidates_filtered_by_edge = {}
+        for pattern_node, _ in self_loop_pattern_edges:
+            node_candidates = self_loop_nodes_candidates[pattern_node]
+            node_candidates_filtered_by_edge[pattern_node] = {node for node, _ in _filter_edge_candidates(
+                graph, pattern, pattern_node, pattern_node, node_candidates, node_candidates)}
         
-    #STAVS DEBUG
-    print("Edge candidates: ", edge_candidates)
+        partial_assignments = _extend_assignments_with_nodes(node_candidates_filtered_by_edge, partial_assignments, graph) or []
 
+        if not partial_assignments:  # If no valid partial assignments from self-loops, return early
+            return
 
-    # Initialize partial assignments based on valid edge candidates
-    # We can't use set because dict is not hashable, so we use a list
-    partial_assignments = list()
+    # Step 2: Handle non-self-loop edges, if they exist
+    if non_self_loop_pattern_edges:
+        partial_assignments = _extend_assignments_with_edges(non_self_loop_pattern_edges, partial_assignments, pattern, graph) or []
 
-    for (src_pattern_node, dst_pattern_node) in pattern.edges:
-        new_assignments = list()
+        if not partial_assignments:  # If no valid partial assignments from non-self-loop edges, return early
+            return
 
-        valid_edge_candidates = edge_candidates[(src_pattern_node, dst_pattern_node)]
-        for src_candidate, dst_candidate in valid_edge_candidates:
-            for partial_assignment in partial_assignments or [{}]:
-                new_assignment = {pattern_node : input_node for pattern_node, input_node in partial_assignment.items()}
-                new_assignment = _add_candidates_to_assignment(src_candidate, dst_candidate, partial_assignment, src_pattern_node, dst_pattern_node)
-                if new_assignment is not None:
-                    new_assignments.append(new_assignment)
-                    
-        if not new_assignments:  # If no new assignments are found for a pair of pattern nodes, the pattern cannot be matched
-             return
-        partial_assignments = new_assignments
-
-    #STAVS DEBUG
-    print("Partial assignments: ", partial_assignments)
-  
-    # For each partial assignment, we create all possible mappings that complete the assignment 
-    # (using the remaining pattern nodes that are not connected by edges, and input nodes that 
-    # match the attributes and are not already assigned). 
-    # Then, we create copies of the partial assignment for each possible completing assignment,
-    # and add them to the list of assignments.
-
-    assignments = list()
+    # Step 3: Complete the partial assignments with remaining pattern nodes (nodes without edges)
+    assignments = []
+    assigned_pattern_nodes = set()
     for partial_assignment in partial_assignments:
-        # Find remaining pattern nodes and input nodes
-        remaining_pattern_nodes = set(pattern.nodes) - set(partial_assignment.keys())
-        if not remaining_pattern_nodes:
-            assignments.append(partial_assignment)
-            continue
+        assigned_pattern_nodes.update(partial_assignment.keys())
+        
+    remaining_pattern_nodes = set(pattern.nodes) - assigned_pattern_nodes
 
-        remaining_input_nodes = set(graph.nodes) - set(partial_assignment.values())
-        completing_assignments = list()
+    if not remaining_pattern_nodes:  # No remaining pattern nodes
+        assignments = partial_assignments  
+    else:
+        remaining_node_candidates = {node: _find_input_nodes_candidates(node, pattern, graph) for node in remaining_pattern_nodes}
+        assignments = _extend_assignments_with_nodes(remaining_node_candidates, partial_assignments, graph) or []
 
-        # Get all permutations of the remaining input nodes that could be mapped to the remaining pattern nodes
-        possible_mappings = permutations(remaining_input_nodes, len(remaining_pattern_nodes))
-
-        # Create completing assignments by mapping remaining pattern nodes to input nodes for each permutation
-        for perm in possible_mappings:
-            completing_assignment = dict()
-            for pattern_node, input_node in zip(remaining_pattern_nodes, perm):
-                completing_assignment[pattern_node] = input_node
-            completing_assignments.append(completing_assignment)
-
-        # Add the completing assignments to the overall list of assignments
-        for completing_assignment in completing_assignments:
-            new_assignment = {pattern_node: input_node for pattern_node, input_node in partial_assignment.items()}
-            new_assignment.update(completing_assignment)
-            assignments.append(new_assignment)
-                
-    #STAVS DEBUG
-    print("Assignments: ", assignments)
-
-    # Filter and yield valid subgraphs that match the pattern (structurally and by attributes)
+    # Step 4: Yield valid subgraphs and their assignments
     for assignment in assignments:
-        subgraph = graph.subgraph(assignment.values())
-        yield subgraph, assignment
+        subgraph = DiGraph()
+        subgraph.add_nodes_from(set(assignment.values()))
+        for pattern_edge in list(pattern.edges):
+            graph_edge = (assignment[pattern_edge[0]], assignment[pattern_edge[1]])
+            if graph_edge in graph.edges:
+              subgraph.add_edge(graph_edge[0], graph_edge[1])
+            else: # In that case we don't need to check the rest of the isomorphism
+                break
 
-    #TODO: show Dean what happens when we use the isomorphism function - it removes mappings where if there isn't an edge 
-    # between two nodes in the pattern, it doesn't allow them to be mapped in the assignment
-    # # Validate the subgraph for isomorphism against the pattern
-    #     if isomorphism.is_isomorphic(subgraph, pattern, node_match=_attributes_match, edge_match=_attributes_match):
-    #         yield subgraph, assignment
+        # Validate subgraph for isomorphism
+        if isomorphism.is_isomorphic(subgraph, pattern, node_match=_attributes_match, edge_match=_attributes_match):
+            yield subgraph, assignment
 
-# %% ../nbs/03_matcher.ipynb 18
+# %% ../nbs/03_matcher.ipynb 19
 FilterFunc = Callable[[Match], bool]
 
-# %% ../nbs/03_matcher.ipynb 21
+# %% ../nbs/03_matcher.ipynb 22
+# TODO: Not sure this is needed since we remove duplicates in the _find_pattern_based_matches function
 def _filter_duplicated_matches(matches: list[Match]) -> Iterator[Match]:
     """Remove duplicates from a list of Matches, based on their mappings. Return an iterator of the matches without duplications.
 
@@ -289,63 +411,58 @@ def _filter_duplicated_matches(matches: list[Match]) -> Iterator[Match]:
             mappings.append(match.mapping)
             yield match
 
-# %% ../nbs/03_matcher.ipynb 22
-def _find_intersecting_pattern_nodes(exact_match_pattern: DiGraph, collection_pattern: DiGraph) -> set:
+# %% ../nbs/03_matcher.ipynb 23
+def _find_intersecting_pattern_nodes(single_nodes_pattern: DiGraph, collection_pattern: DiGraph) -> set:
     """
-    Find the intersecting pattern nodes between the exact match pattern and the collection pattern.
+    Find the intersecting pattern nodes between the single nodes match pattern and the collection pattern.
 
-    The intersecting pattern nodes are those that appear in both the exact match pattern 
+    The intersecting pattern nodes are those that appear in both the single nodes match pattern 
     (i.e., pattern nodes that aim to match a single, unique input node) and the collection pattern 
     (i.e., pattern nodes that aim to match multiple input nodes).
 
     Args:
-        exact_match_pattern (DiGraph): The pattern graph representing nodes that match exactly one input node.
+        single_nodes_pattern (DiGraph): The pattern graph representing nodes that match single nodesly one input node.
         collection_pattern (DiGraph): The pattern graph representing nodes that match multiple input nodes.
 
     Returns:
-        set: A set of pattern nodes that are present in both the exact match pattern and the collection pattern.
+        set: A set of pattern nodes that are present in both the single nodes match pattern and the collection pattern.
     """
-    intersecting_pattern_nodes = set(exact_match_pattern.nodes) & set(collection_pattern.nodes)
+    intersecting_pattern_nodes = set(single_nodes_pattern.nodes) & set(collection_pattern.nodes)
     return intersecting_pattern_nodes
 
-
-#| export
-def _add_collections_to_exact_matches(input_graph: DiGraph, collection_pattern: DiGraph, 
-                                      exact_matches: Set[Dict[NodeName, NodeName]], intersecting_pattern_nodes: Set[NodeName]
+# %% ../nbs/03_matcher.ipynb 24
+def _add_collections_to_single_nodes_matches(input_graph: DiGraph, collection_pattern: DiGraph, 
+                                      single_nodes_matches: List[Dict[NodeName, Set[NodeName]]], intersecting_pattern_nodes: Set[NodeName]
                                       ) -> Iterator[Dict[NodeName, Set[NodeName]]]:
     """
-    Add collection matches to the existing exact matches by finding subgraph matches for collection pattern nodes
-    and merging them with the given exact match mapping.
+    Add collection matches to the existing single nodes matches by finding subgraph matches for collection pattern nodes
+    and merging them with the given single nodes match mapping.
 
-    This function finds matches in the input graph that satisfy both the exact match pattern (pattern nodes 
-    that aim to match exactly one input node) and the collection pattern (pattern nodes that aim to match 
+    This function finds matches in the input graph that satisfy both the single nodes match pattern (pattern nodes 
+    that aim to match single nodesly one input node) and the collection pattern (pattern nodes that aim to match 
     multiple input nodes).
 
     Args:
-        input_graph (DiGraph): The input graph where collection matches are searched.
+        input_graph (DiGraph): The input graph.
         collection_pattern (DiGraph): The pattern graph representing nodes that match multiple input nodes.
-        exact_matches (Set[Dict[NodeName, NodeName]]): The set of exact matches, where each pattern node 
-            is mapped to a single input node.
-        intersecting_pattern_nodes (Set[NodeName]): The set of pattern nodes that intersect between the 
-            exact match pattern and collection pattern.
+        single_nodes_matches (List[Dict[NodeName, Set[NodeName]]]): A list of mappings for single nodes matches, in set semantics.
+        intersecting_pattern_nodes (Set[NodeName]): A set of pattern nodes that are present in both the single nodes match pattern and the collection pattern.
 
     Yields:
         Iterator[Dict[NodeName, Set[NodeName]]]: An iterator over the updated mappings, where each includes both 
-        the previous exact match mapping and the newly found collection matches for this exact match.
+        the previous single nodes match mapping and the newly found collection matches for this single nodes match.
     """
     input_graph_copy = input_graph.copy()
 
-    # Enrich the exact match mapping with the corresponding collection matches.
-    # This involves moving to set semantics for exact matches nodes and adding collection matches.
-    for exact_match in exact_matches:
-        updated_mapping = {pattern_node: {input_node} for pattern_node, input_node in exact_match.items()}
+    # Enrich the single nodes match mapping with the corresponding collection matches.
+    for mapping in single_nodes_matches:
         non_intersecting_collection_pattern_nodes = set(collection_pattern.nodes) - intersecting_pattern_nodes
-        updated_mapping.update({pattern_node: set() for pattern_node in non_intersecting_collection_pattern_nodes})
+        mapping.update({pattern_node: set() for pattern_node in non_intersecting_collection_pattern_nodes})
 
-        # Lock intersecting pattern nodes to their corresponding input node in the exact match
+        # Lock intersecting pattern nodes to their corresponding input node in the single nodes match
         collection_pattern_copy = collection_pattern.copy()
         for intersecting_pattern_node in intersecting_pattern_nodes:
-            collection_pattern_copy.nodes[intersecting_pattern_node]['_id'] = exact_match[intersecting_pattern_node]
+            collection_pattern_copy.nodes[intersecting_pattern_node]['_id'] = mapping[intersecting_pattern_node]
 
         # Find collection matches using the locked pattern
         collection_matches = list(_find_pattern_based_matches(input_graph_copy, collection_pattern_copy))
@@ -353,7 +470,7 @@ def _add_collections_to_exact_matches(input_graph: DiGraph, collection_pattern: 
         # Add matches for collection pattern nodes
         for collection_match in collection_matches:
             for collection_pattern_node, matched_input_nodes in collection_match.items():
-                if collection_pattern_node not in intersecting_pattern_nodes: # We already have the exact match for these nodes
-                    updated_mapping[collection_pattern_node].add(matched_input_nodes)  # Add the matched input node
+                if collection_pattern_node not in intersecting_pattern_nodes: # We already have the single nodes match for these nodes
+                    mapping[collection_pattern_node].add(matched_input_nodes)  # Add the matched input node
 
-        yield updated_mapping
+        yield mapping

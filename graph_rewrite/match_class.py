@@ -210,14 +210,14 @@ class Match:
 
                 if self._is_single(src) and self._is_single(dst):
                     return edge_or_edges
-                return EdgeCollection(edge_or_edges)  # set of edges
+                return EdgeCollectionView(edge_or_edges)  # set of edges
 
             # Handle nodes
             node_or_nodes = self.__get_node(key)
 
             if self._is_single(key):
                 return node_or_nodes
-            return NodeCollection(node_or_nodes)  # set of nodes
+            return NodeCollectionView(node_or_nodes)  # set of nodes
 
         except KeyError:
             raise GraphRewriteException(f"The symbol {key} does not exist in the pattern, or it was removed from the graph")
@@ -247,15 +247,26 @@ def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_
     edges_list = []
 
     # Copy mapping to a new dictionary for filtering purposes
-    cleared_mapping = {k: v for k, v in mapping.items() if not (filter and is_anonymous_node(k))}
+    cleared_mapping = mapping
+    
+    # Filter out anonymous nodes if needed
+    anonymous_nodes_to_remove = []
+    if filter:
+        for pattern_node in mapping.keys():
+            if is_anonymous_node(pattern_node):
+                anonymous_nodes_to_remove.append(pattern_node)
+
+        for node in anonymous_nodes_to_remove:
+            cleared_mapping.pop(node)
 
     # Collect the nodes that passed the filtering process
     nodes_list = list(cleared_mapping.keys())
 
     # Process edges in the pattern and filter out any that include anonymous nodes if needed
     for (src, dst) in single_pattern.edges | collections_pattern.edges:
-        if not (filter and (is_anonymous_node(src) or is_anonymous_node(dst))):
-            edges_list.append((src, dst))
+        if filter and (is_anonymous_node(src) or is_anonymous_node(dst)):
+            continue
+        edges_list.append((src, dst))
 
     return Match(input_graph, nodes_list, edges_list, cleared_mapping, set(single_pattern.nodes))
 
