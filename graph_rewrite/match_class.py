@@ -37,37 +37,40 @@ def is_anonymous_node(node_name: NodeName) -> bool:
     Returns:
         bool: Returns True if the node is anonymous, False otherwise.
     """
+    #TODO: change to _anonymous_node_ as a prefix and also add a exception for _anonymous_node if the user tries to use it
     return len(node_name) >= 1 and node_name[0] == '_'
 
-# %% ../nbs/02_match_class.ipynb 20
+# %% ../nbs/02_match_class.ipynb 21
 class Match:
     """
     Represents a single match of a pattern inside an input graph.
     Provides a subview to a graph, limited to the nodes, edges, and attributes specified in the pattern.
     """
-    def __init__(self, graph: DiGraph, nodes: List[NodeName], edges: List[EdgeName], 
-                 mapping: Dict[NodeName, set[NodeName]], single_nodes: set[NodeName]
-                 , warn_on_collisions: bool = True):
+    def __init__(self, input_graph: DiGraph, pattern_nodes: List[NodeName], single_nodes: set[NodeName], 
+                 pattern_edges: List[EdgeName], mapping: Dict[NodeName, set[NodeName]], 
+                 warn_on_collisions: bool = True):
         """
         Initialize the Match object.
 
         Args:
-            graph (DiGraph): The input graph being matched.
-            nodes (List[NodeName]): List of pattern nodes included in this match.
-            edges (List[EdgeName]): List of pattern edges included in this match.
-            mapping (Dict[NodeName, Set[NodeName]]): Mapping from pattern nodes to input graph nodes.
-            single_nodes (Set[NodeName]): Set of pattern nodes for which we map a single input graph node.
-            warn_on_collisions (bool): Flag to warn the user if there are any collisions in the mapping (default: True).
+            input_graph (DiGraph): The input graph.
+            pattern_nodes (List[NodeName]): The nodes in the pattern (including anonymous nodes).
+            single_nodes (Set[NodeName]): The single nodes in the pattern (including anonymous nodes).
+            pattern_edges (List[EdgeName]): The edges in the pattern (including anonymous edges).
+            mapping (Dict[NodeName, Set[NodeName]]): The mapping from pattern nodes to input graph nodes.
+            filter (bool): Whether to filter out anonymous nodes and edges from the match.
+            warn_on_collisions (bool): Whether to warn if there are collisions in the mapping.
         """
-        self.graph = graph
-        self._nodes = nodes
-        self._edges = edges
-        self.mapping = mapping  # Pattern nodes are mapped to sets of input graph nodes (for collections)
-        self.single_nodes = single_nodes  # Nodes requiring a mapping to a single input graph node (non-collections)
-        self._warn_on_collisions = warn_on_collisions
-        if self._warn_on_collisions:
-            self._check_for_collisions(self.mapping)
+        self.graph = input_graph
+        self._nodes = pattern_nodes
+        self._single_nodes = single_nodes
+        self._edges = pattern_edges
+        self.mapping = mapping
+        self.warn_on_collisions = warn_on_collisions
 
+
+    #TODO: warn on collisions and then remove this arg from functions
+    #TODO: use the module logging like in spannerlib
     def _check_for_collisions(self, mapping: Dict[NodeName, set[NodeName]]) -> Dict[NodeName, set[NodeName]]:
         """
         Check if there are any collisions in the mapping - i.e., if the same input node is mapped to multiple
@@ -88,6 +91,7 @@ class Match:
                                      if input_node in mapping[pattern_node]]
             if len(matched_pattern_nodes) > 1:
                     #TODO: use logging instead of print
+                    #TODO: default dict for this
                     print(f"Warning: Input node {input_node} is mapped to multiple pattern nodes: {matched_pattern_nodes}")
         return mapping
                 
@@ -113,7 +117,7 @@ class Match:
 
     def _is_single(self, pattern_node: NodeName) -> bool:
         """Check if the pattern node requires an single."""
-        return pattern_node in self.single_nodes
+        return pattern_node in self._single_nodes
 
     def __get_node(self, pattern_node):
         """
@@ -170,21 +174,39 @@ class Match:
             raise GraphRewriteException(f"No edges found between {pattern_src} and {pattern_dst}.")
         return input_edges
 
-
+    #TODO: these should be inner methods
     def nodes(self):
-        """Return all nodes involved in this match, including collections."""
+        """
+        Return all nodes involved in this match.
+        This includes both single nodes and collections of nodes.
+        """
         return {pattern_node: self.__get_node(pattern_node) for pattern_node in self._nodes}
 
     def edges(self):
-        """Return all edges involved in this match, including collections."""
-        return {
-            _convert_to_edge_name(pattern_src, pattern_dest): self.__get_edge(pattern_src, pattern_dest) 
-            for (pattern_src, pattern_dest) in self._edges
-        }
+        """
+        Return all edges involved in this match.
+        This includes both single edges and collections of edges.
+        """
+        return {_convert_to_edge_name(pattern_src, pattern_dest): self.__get_edge(pattern_src, pattern_dest) 
+            for (pattern_src, pattern_dest) in self._edges}
 
     def set_graph(self, graph: DiGraph):
         """Update the graph associated with this match."""
         self.graph = graph
+
+    def remove_anonymous_nodes_and_edges(self):
+        """Remove anonymous nodes and edges from the match."""
+        for node in list(self._nodes): # Use list() to avoid modifying the set while iterating
+            if is_anonymous_node(node):
+                self._nodes.remove(node)
+
+        for edge in list(self._edges): # Use list() to avoid modifying the set while iterating
+            if is_anonymous_node(edge[0]) or is_anonymous_node(edge[1]):
+                self._edges.remove(edge)
+
+        for node in list(self.mapping.keys()):
+            if is_anonymous_node(node):
+                self.mapping.pop(node)
 
     def __eq__(self, other):
         """Check if two matches are equal based on their node mappings."""
@@ -226,9 +248,9 @@ class Match:
         """Return a string representation of the match's node mapping."""
         return str(self.mapping)
 
-# %% ../nbs/02_match_class.ipynb 22
+# %% ../nbs/02_match_class.ipynb 23
 def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_pattern: DiGraph, 
-                     mapping: Dict[NodeName, Set[NodeName]], filter: bool=True) -> Match:
+                     mapping: Dict[NodeName, Set[NodeName]], warn_on_collisions: bool=True) -> Match:
     """
     Convert a given mapping (which represents a match between the pattern and the input graph) 
     into an instance of the Match class, which provides a subgraph view based on nodes and edges.
@@ -243,34 +265,16 @@ def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_
     Returns:
         Match: An instance of the Match class representing the match for the given mapping.
     """
-    nodes_list = []
-    edges_list = []
 
-    # Copy mapping to a new dictionary for filtering purposes
-    cleared_mapping = mapping
-    
-    # Filter out anonymous nodes if needed
-    anonymous_nodes_to_remove = []
-    if filter:
-        for pattern_node in mapping.keys():
-            if is_anonymous_node(pattern_node):
-                anonymous_nodes_to_remove.append(pattern_node)
+    pattern_nodes = list(mapping.keys())
 
-        for node in anonymous_nodes_to_remove:
-            cleared_mapping.pop(node)
+    single_nodes = set(single_pattern.nodes)
 
-    # Collect the nodes that passed the filtering process
-    nodes_list = list(cleared_mapping.keys())
+    pattern_edges = list(set(single_pattern.edges) | set(collections_pattern.edges))
 
-    # Process edges in the pattern and filter out any that include anonymous nodes if needed
-    for (src, dst) in single_pattern.edges | collections_pattern.edges:
-        if filter and (is_anonymous_node(src) or is_anonymous_node(dst)):
-            continue
-        edges_list.append((src, dst))
+    return Match(input_graph, pattern_nodes, single_nodes, pattern_edges, mapping, warn_on_collisions)
 
-    return Match(input_graph, nodes_list, edges_list, cleared_mapping, set(single_pattern.nodes))
-
-# %% ../nbs/02_match_class.ipynb 42
+# %% ../nbs/02_match_class.ipynb 43
 def draw_match(g, m, **kwargs):
     """
     Draw the input graph with the nodes and edges that are part of the match highlighted.

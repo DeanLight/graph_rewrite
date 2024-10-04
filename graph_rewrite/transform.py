@@ -820,6 +820,8 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
     _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
 
     # Parse LHS and P (global for all matches)
+    #TODO: lhs_to_graph shouldn't get the condition as an argument, and *should* return the constraints, and then send
+    # both the condition function of the user and the constraints to the find_matches function
     lhs_graph, lhs_collections_graph, condition = lhs_to_graph(lhs, condition)
     p_graph = p_to_graph(p) if p else None
     

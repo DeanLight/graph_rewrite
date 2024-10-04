@@ -286,6 +286,9 @@ def lhs_to_graph(lhs: str, condition = None,debug=False):
             # TODO: combine constraints and collection_constraints? # Collections Feature
 
         # add the final constraints to the "condition" function
+        #TODO: instead of having this logic in the parser, move it to the match notebook, and from this function
+        # of lhs_to_graph, return the constraints as some data structure, the graphs.
+
         def type_condition(match: Match):
             flag = True
             for graph_obj in constraints.keys():
@@ -313,8 +316,10 @@ def lhs_to_graph(lhs: str, condition = None,debug=False):
                 return flag
             else:
                 return flag and condition(match) 
+            
+        return final_graph, collections_graph, type_condition
                 
-        return final_graph, collections_graph, type_condition 
+       # return final_graph, collections_graph, constraints #TODO: understand how I want to return the constraints 
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
         raise GraphRewriteException('Unable to convert LHS: {}'.format(e))
 
