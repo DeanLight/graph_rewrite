@@ -71,6 +71,9 @@ class graphRewriteTransformer(Transformer):
         # LHS parameters
         self.constraints = {}
         self.cnt = 0
+        #TODO: show Dean - is this the right place?
+        if "_anonymous_node_" in self.component:
+            raise GraphRewriteException("_anonymous_node_ prefix cannot be used for a vertex name in LHS")
 
     def STRING(self, arg):
         # remove " "
@@ -146,7 +149,7 @@ class graphRewriteTransformer(Transformer):
 
     def ANONYMUS(self, _): #
         # return a dedicated name for anonymus (string), and an empty indices list.
-        x = "_" + str(self.cnt)
+        x = "_anonymous_node_" + str(self.cnt)
         self.cnt += 1
         return (x, [])
 

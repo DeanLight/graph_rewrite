@@ -10,6 +10,7 @@ from typing import *
 from .core import _create_graph, draw, GraphRewriteException, NodeName, EdgeName
 from itertools import product
 from collections import defaultdict
+import logging
 
 # %% ../nbs/02_match_class.ipynb 12
 def _convert_to_edge_name(src: NodeName, dest: NodeName) -> str:
@@ -37,8 +38,7 @@ def is_anonymous_node(node_name: NodeName) -> bool:
     Returns:
         bool: Returns True if the node is anonymous, False otherwise.
     """
-    #TODO: change to _anonymous_node_ as a prefix and also add a exception for _anonymous_node if the user tries to use it
-    return len(node_name) >= 1 and node_name[0] == '_'
+    return len(node_name) >= 1 and node_name.startswith('_anonymous_node_')
 
 # %% ../nbs/02_match_class.ipynb 19
 class Match:
@@ -75,14 +75,16 @@ class Match:
         pattern nodes. If there are, print a warning specifying the input nodes that are being mapped to multiple
         pattern nodes.
         """
+        logger = logging.getLogger(__name__)    
+
         #check it only for single nodes, as this behaviour is expected for collections
         input_to_pattern_nodes = defaultdict(set)
         for pattern_node in self._single_nodes:
             for input_node in self.mapping[pattern_node]:
                 input_to_pattern_nodes[input_node].add(pattern_node)
                 if len(input_to_pattern_nodes[input_node]) > 1:
-                    #TODO: use logging like in spannerlib instead of printing
-                    print(f"Warning: Input node {input_node} is mapped to multiple pattern nodes: {pattern_node}")
+                    #TODO: Show Dean - is this the right way to log?
+                    logger.warning(f"Input node {input_node} is mapped to multiple pattern nodes: {pattern_node}") 
         return 
                 
     def _check_node_in_pattern(self, pattern_node: NodeName):
@@ -163,22 +165,6 @@ class Match:
         if not input_edges:
             raise GraphRewriteException(f"No edges found between {pattern_src} and {pattern_dst}.")
         return input_edges
-
-    #TODO: these should be inner methods
-    def nodes(self):
-        """
-        Return all nodes involved in this match.
-        This includes both single nodes and collections of nodes.
-        """
-        return {pattern_node: self.__get_node(pattern_node) for pattern_node in self._nodes}
-
-    def edges(self):
-        """
-        Return all edges involved in this match.
-        This includes both single edges and collections of edges.
-        """
-        return {_convert_to_edge_name(pattern_src, pattern_dest): self.__get_edge(pattern_src, pattern_dest) 
-            for (pattern_src, pattern_dest) in self._edges}
 
     def set_graph(self, graph: DiGraph):
         """Update the graph associated with this match."""
@@ -264,7 +250,7 @@ def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_
 
     return Match(input_graph, pattern_nodes, single_nodes, pattern_edges, mapping, warn_on_collisions)
 
-# %% ../nbs/02_match_class.ipynb 41
+# %% ../nbs/02_match_class.ipynb 40
 def draw_match(g, m, **kwargs):
     """
     Draw the input graph with the nodes and edges that are part of the match highlighted.
