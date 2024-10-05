@@ -820,15 +820,13 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
     _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
 
     # Parse LHS and P (global for all matches)
-    #TODO: lhs_to_graph shouldn't get the condition as an argument, and *should* return the constraints, and then send
-    # both the condition function of the user and the constraints to the find_matches function
-    lhs_graph, lhs_collections_graph, condition = lhs_to_graph(lhs, condition)
+    lhs_graph, lhs_collections_graph = lhs_to_graph(lhs)
     p_graph = p_to_graph(p) if p else None
     
     if is_recursive:
         while True:
             try:
-                next_match = next(find_matches(input_graph, lhs_graph, lhs_collections_graph, condition=condition))
+                next_match = next(find_matches(input_graph, lhs_graph, lhs_collections_graph, condition))
                 if display_matches:
                     draw_match(input_graph, next_match)
                 yield next_match
@@ -845,7 +843,7 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
         copy_input_graph = _copy_graph(input_graph)
 
         # Find matches lazily and transform
-        for match in find_matches(copy_input_graph, lhs_graph, lhs_collections_graph, condition=condition):
+        for match in find_matches(copy_input_graph, lhs_graph, lhs_collections_graph, condition):
             if display_matches:
                 draw_match(input_graph, match)
             # the match object points to the copy graph, so we need to move it to the original graph for imperative changes

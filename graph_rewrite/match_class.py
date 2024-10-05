@@ -40,7 +40,7 @@ def is_anonymous_node(node_name: NodeName) -> bool:
     #TODO: change to _anonymous_node_ as a prefix and also add a exception for _anonymous_node if the user tries to use it
     return len(node_name) >= 1 and node_name[0] == '_'
 
-# %% ../nbs/02_match_class.ipynb 21
+# %% ../nbs/02_match_class.ipynb 19
 class Match:
     """
     Represents a single match of a pattern inside an input graph.
@@ -66,34 +66,24 @@ class Match:
         self._single_nodes = single_nodes
         self._edges = pattern_edges
         self.mapping = mapping
-        self.warn_on_collisions = warn_on_collisions
+        if warn_on_collisions:
+            self._check_for_collisions()
 
-
-    #TODO: warn on collisions and then remove this arg from functions
-    #TODO: use the module logging like in spannerlib
-    def _check_for_collisions(self, mapping: Dict[NodeName, set[NodeName]]) -> Dict[NodeName, set[NodeName]]:
+    def _check_for_collisions(self) -> None:
         """
         Check if there are any collisions in the mapping - i.e., if the same input node is mapped to multiple
         pattern nodes. If there are, print a warning specifying the input nodes that are being mapped to multiple
         pattern nodes.
-
-        Args:
-            mapping (Dict[NodeName, Set[NodeName]]): Mapping from pattern nodes to input graph nodes.
-
-        Returns:
-            Dict[NodeName, Set[NodeName]]: The mapping with any collisions resolved.
         """
-        pattern_nodes = mapping.keys()
-        input_nodes = mapping.values()
-        
-        for input_node in input_nodes:
-            matched_pattern_nodes = [pattern_node for pattern_node in pattern_nodes 
-                                     if input_node in mapping[pattern_node]]
-            if len(matched_pattern_nodes) > 1:
-                    #TODO: use logging instead of print
-                    #TODO: default dict for this
-                    print(f"Warning: Input node {input_node} is mapped to multiple pattern nodes: {matched_pattern_nodes}")
-        return mapping
+        #check it only for single nodes, as this behaviour is expected for collections
+        input_to_pattern_nodes = defaultdict(set)
+        for pattern_node in self._single_nodes:
+            for input_node in self.mapping[pattern_node]:
+                input_to_pattern_nodes[input_node].add(pattern_node)
+                if len(input_to_pattern_nodes[input_node]) > 1:
+                    #TODO: use logging like in spannerlib instead of printing
+                    print(f"Warning: Input node {input_node} is mapped to multiple pattern nodes: {pattern_node}")
+        return 
                 
     def _check_node_in_pattern(self, pattern_node: NodeName):
         """Ensure that the pattern node exists in the pattern being matched."""
@@ -248,7 +238,7 @@ class Match:
         """Return a string representation of the match's node mapping."""
         return str(self.mapping)
 
-# %% ../nbs/02_match_class.ipynb 23
+# %% ../nbs/02_match_class.ipynb 21
 def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_pattern: DiGraph, 
                      mapping: Dict[NodeName, Set[NodeName]], warn_on_collisions: bool=True) -> Match:
     """
@@ -274,7 +264,7 @@ def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_
 
     return Match(input_graph, pattern_nodes, single_nodes, pattern_edges, mapping, warn_on_collisions)
 
-# %% ../nbs/02_match_class.ipynb 43
+# %% ../nbs/02_match_class.ipynb 41
 def draw_match(g, m, **kwargs):
     """
     Draw the input graph with the nodes and edges that are part of the match highlighted.
