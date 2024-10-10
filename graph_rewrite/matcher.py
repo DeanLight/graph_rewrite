@@ -100,7 +100,7 @@ def _is_valid_edge_candidate(input_graph: DiGraph, pattern_edge_attrs: dict,
     if not _attributes_match(pattern_edge_attrs, input_edge_attrs):
         return False
 
-    # Special case: If the source and destination are the same node in the pattern,
+    # Special case - self loops in pattern graph: If the source and destination are the same node in the pattern,
     # ensure the source and destination candidates are also the same in the input graph
     if src_pattern_node == dst_pattern_node and src_candidate != dst_candidate:
         return False
@@ -108,7 +108,6 @@ def _is_valid_edge_candidate(input_graph: DiGraph, pattern_edge_attrs: dict,
     return True
 
 # %% ../nbs/03_matcher.ipynb 13
-# TODO: add constraints as an argument for _find_pattern_based_matches to filter the matches based on the constraints 
 def _find_pattern_based_matches(graph: DiGraph, pattern: DiGraph) -> Iterator[Tuple[DiGraph, Dict[NodeName, NodeName]]]:
     """
     Find all subgraphs in the input graph that match the given pattern graph based on both structure (nodes and edges)
@@ -144,13 +143,11 @@ def _find_pattern_based_matches(graph: DiGraph, pattern: DiGraph) -> Iterator[Tu
             if input_node_counts[input_node] > 1:
                 break  # Skip assignment if duplicate nodes found
         else:
-            # Check if edges between input nodes match the edges in the pattern
+            # Check if edges between input nodes match the edges in the pattern 
+            # (existence checks, and attributes check based on attribute existence and constant values)
             for src_pattern_node, dst_pattern_node in pattern.edges:
                 src_input_node = assignment[src_pattern_node]
                 dst_input_node = assignment[dst_pattern_node]
-                if not graph.has_edge(src_input_node, dst_input_node):
-                    break  # Skip this assignment if an edge is missing
-                # TODO: add constraints as an argument for _is_valid_edge_candidate to filter the matches based on the constraints 
                 if not _is_valid_edge_candidate(graph, pattern.get_edge_data(src_pattern_node, dst_pattern_node, default={}),
                                                 src_input_node, dst_input_node, src_pattern_node, dst_pattern_node):
                     break

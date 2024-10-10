@@ -79,7 +79,7 @@ class Match:
 
         #check it only for single nodes, as this behaviour is expected for collections
         input_to_pattern_nodes = defaultdict(set)
-        for pattern_node in self._single_nodes:
+        for pattern_node in self._nodes:
             for input_node in self.mapping[pattern_node]:
                 input_to_pattern_nodes[input_node].add(pattern_node)
                 if len(input_to_pattern_nodes[input_node]) > 1:
