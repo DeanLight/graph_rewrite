@@ -24,20 +24,27 @@ def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
     - Constant value checks (ensures that constant values match).
 
     Args:
-        pattern_attrs (dict): Attributes of the pattern (node or edge).
-        input_attrs (dict): Attributes of the input (node or edge).
+        pattern_attrs (dict): The pattern attributes.
+        input_attrs (dict): The input attributes.
 
     Returns:
         bool: True if the input attributes match the pattern attributes, False otherwise.
     """
-    for attr_name, attr_value in pattern_attrs.items():
+    for attr_name in pattern_attrs:
         if attr_name not in input_attrs:  # If the attribute does not exist, return False
             return False
         
+        (attr_value, attr_type) = pattern_attrs[attr_name]
         if attr_value is None: # If the attribute exists, but the value is None, continue to the next attribute
             continue
 
-        if input_attrs[attr_name] != attr_value: # copares the values of the attributes (and, if the attribute type was mentioned in the pattern, compares the types)
+        if input_attrs[attr_name] != attr_value:
+            return False
+        
+        if attr_type is None:
+            continue
+
+        if not isinstance(input_attrs[attr_name], attr_type):
             return False
 
     return True
@@ -57,10 +64,11 @@ def _find_input_nodes_candidates(pattern_node: NodeName, pattern: DiGraph, input
     Returns:
         set[NodeName]: A set of input graph nodes that match the required attributes and have at least one matching edge.
     """
-    pattern_node_attrs = pattern.nodes[pattern_node]
+    pattern_attrs = pattern.nodes[pattern_node] # {attr_name: (attr_type,attr_value)}
 
-    if "_id" in pattern_node_attrs:
-        input_node_id = pattern_node_attrs.pop("_id")
+    #check if _id is in the pattern_node_attrs, if so, we will only check the node with the same _id
+    if "_id" in pattern_attrs:
+        input_node_id = pattern_attrs.pop("_id")[1]
         input_nodes_to_check = [input_node_id]
     else:
         input_nodes_to_check = list(input_graph.nodes)
@@ -69,7 +77,7 @@ def _find_input_nodes_candidates(pattern_node: NodeName, pattern: DiGraph, input
     candidate_nodes = {
         input_node
         for input_node in input_nodes_to_check
-        if _attributes_match(pattern_node_attrs, input_graph.nodes[input_node])
+        if _attributes_match(pattern_attrs, input_graph.nodes[input_node])
     }
 
     return candidate_nodes

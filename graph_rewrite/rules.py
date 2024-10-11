@@ -91,13 +91,16 @@ class Rule:
     - P - defines what parts to preserve (and also defines clones).
     - RHS - defines what parts to add (and also defines merges).
     """
-    def __init__(self, lhs: DiGraph, p: DiGraph = None, rhs: DiGraph = None, collections: DiGraph = None,
-                  collection_mapping: dict = {}, merge_policy = MergePolicy.choose_last):
-        self.lhs = lhs
-        self.p = p if p else self.lhs.copy()
+    #TODO: use Match in order to reduce code redundancy whenever we want to acces both collections and single nodes - 
+    def __init__(self, match: Match, single_nodes_pattern: DiGraph, collections_pattern: DiGraph, p: DiGraph = None, rhs: DiGraph = None,
+                 merge_policy = MergePolicy.choose_last):
+        self.match = match
+        self.single_nodes_pattern = single_nodes_pattern
+        self.collections_pattern = collections_pattern
+        #TODO: we need to have an alternative for using lhs.copy as we no longer have the lhs graph (we also have collections)
+        #self.p = p if p else self.lhs.copy()
+        self.p = p
         self.rhs = rhs if rhs else self.p.copy()
-        self.collections = collections
-        self.collection_mapping = collection_mapping
         self.merge_policy = merge_policy
 
         self._p_to_lhs, self._p_to_rhs = {}, {}
