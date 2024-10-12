@@ -12,11 +12,10 @@ from itertools import product
 from collections import defaultdict
 import logging
 
-# %% ../nbs/02_match_class.ipynb 6
-#TODO: explain about this
+# %% ../nbs/02_match_class.ipynb 7
 logger = logging.getLogger(__name__)    
 
-# %% ../nbs/02_match_class.ipynb 13
+# %% ../nbs/02_match_class.ipynb 14
 def _convert_to_edge_name(src: NodeName, dest: NodeName) -> str:
     """Given a pair of node names, source and destination, return the name of the edge
     connecting the two in the format {src}->{dest}, which is the same format the parser
@@ -31,7 +30,7 @@ def _convert_to_edge_name(src: NodeName, dest: NodeName) -> str:
     """
     return f"{src}->{dest}"
 
-# %% ../nbs/02_match_class.ipynb 15
+# %% ../nbs/02_match_class.ipynb 16
 def is_anonymous_node(node_name: NodeName) -> bool:
     """Given a name of a node in the pattern graph, return true if it begins with '$',
     which is the notion the parser uses to denote anonymous nodes.
@@ -44,7 +43,7 @@ def is_anonymous_node(node_name: NodeName) -> bool:
     """
     return len(node_name) >= 1 and node_name.startswith('_anonymous_node_')
 
-# %% ../nbs/02_match_class.ipynb 20
+# %% ../nbs/02_match_class.ipynb 21
 class Match:
     """
     Represents a single match of a pattern inside an input graph.
@@ -84,7 +83,7 @@ class Match:
             for input_node in self.mapping[pattern_node]:
                 input_to_pattern_nodes[input_node].add(pattern_node)
                 if len(input_to_pattern_nodes[input_node]) > 1:
-                    logger.warning(f"Input node {input_node} is mapped to multiple pattern nodes: {pattern_node}") 
+                    logger.warning(f"Input node {input_node} is mapped to multiple pattern nodes: {input_to_pattern_nodes[input_node]}") 
         return 
                 
     def _check_node_in_pattern(self, pattern_node: NodeName):
@@ -107,7 +106,7 @@ class Match:
         if (input_src, input_dst) not in self.graph.edges:
             raise GraphRewriteException(f"Edge {(input_src, input_dst)} does not exist in the input graph")
 
-    def _is_single(self, pattern_node: NodeName) -> bool:
+    def is_single(self, pattern_node: NodeName) -> bool:
         """Check if the pattern node requires an single."""
         return pattern_node in self._single_nodes
 
@@ -132,7 +131,7 @@ class Match:
             self._check_node_in_graph(input_node)
 
         # Return the single matched node if it's a single node
-        if self._is_single(pattern_node):
+        if self.is_single(pattern_node):
             return self.graph.nodes[input_nodes[0]]
 
         # Otherwise, return the collection of nodes
@@ -154,7 +153,7 @@ class Match:
         input_dst_nodes = self.mapping[pattern_dst]
 
         # Return the single edge if both source and destination nodes are single nodes
-        if self._is_single(pattern_src) and self._is_single(pattern_dst):
+        if self.is_single(pattern_src) and self.is_single(pattern_dst):
             input_src_node = list(input_src_nodes)[0]
             input_dst_node = list(input_dst_nodes)[0]
             self._check_edge_in_graph(input_src_node, input_dst_node)
@@ -209,14 +208,14 @@ class Match:
                 src, dst = key.split("->")
                 edge_or_edges = self.__get_edge(src, dst)
 
-                if self._is_single(src) and self._is_single(dst):
+                if self.is_single(src) and self.is_single(dst):
                     return edge_or_edges
                 return EdgeCollectionView(edge_or_edges)  # set of edges
 
             # Handle nodes
             node_or_nodes = self.__get_node(key)
 
-            if self._is_single(key):
+            if self.is_single(key):
                 return node_or_nodes
             return NodeCollectionView(node_or_nodes)  # set of nodes
 
@@ -226,8 +225,16 @@ class Match:
     def __str__(self):
         """Return a string representation of the match's node mapping."""
         return str(self.mapping)
+    
+    def get_pattern_nodes(self):
+        """Return the pattern nodes."""
+        return self._nodes
+    
+    def get_pattern_edges(self):
+        """Return the pattern edges."""
+        return self._edges
 
-# %% ../nbs/02_match_class.ipynb 22
+# %% ../nbs/02_match_class.ipynb 23
 def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_pattern: DiGraph, 
                      mapping: Dict[NodeName, Set[NodeName]], warn_on_collisions: bool=True) -> Match:
     """
@@ -253,7 +260,7 @@ def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_
 
     return Match(input_graph, pattern_nodes, single_nodes, pattern_edges, mapping, warn_on_collisions)
 
-# %% ../nbs/02_match_class.ipynb 41
+# %% ../nbs/02_match_class.ipynb 42
 def draw_match(g, m, **kwargs):
     """
     Draw the input graph with the nodes and edges that are part of the match highlighted.
