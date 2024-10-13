@@ -49,10 +49,10 @@ lhs_parser = Lark(r"""
 
     pattern: vertex (connection vertex)*
     patterns: pattern ("," pattern)* 
+    lhs: patterns [";" patterns]
 
-    """, parser="lalr", start='patterns' , debug=True)
+    """, parser="lalr", start='lhs', debug=True)
 
-# TODO: Add the ";" delimiter to the lark grammar - don't think about it on your own, ask Dean
 
 # multi_connection: "-" NATURAL_NUMBER "+" [attributes] "->"  - setting for the "-num+->" feature
 
@@ -256,6 +256,10 @@ class graphRewriteTransformer(Transformer):
         #sent as a module output and replaces condition.
         return (G, copy.deepcopy(self.constraints)) 
 
+    def lhs(self, args):
+        return [arg for arg in args if arg is not None]
+
+
 # %% ../nbs/01_lhs_parsing.ipynb 14
 def lhs_to_graph(lhs: str, debug: bool = False) -> Tuple[nx.DiGraph, nx.DiGraph]:
     """
@@ -269,28 +273,25 @@ def lhs_to_graph(lhs: str, debug: bool = False) -> Tuple[nx.DiGraph, nx.DiGraph]
     - Tuple[nx.DiGraph, nx.DiGraph] - a tuple of two networkx graphs: the single nodes graph and the collections graph.
     """
     try:
-        lhs_strs = lhs.split(';')
-        assert len(lhs_strs) <= 2 and len(lhs_strs) >= 1 # at most 2 parts: single nodes and collections, at least 1 part (single nodes)
-
-        # Single nodes
-        single_nodes_lhs = lhs_strs[0]
-        single_nodes_tree = lhs_parser.parse(single_nodes_lhs)
+        parse_tree = lhs_parser.parse(lhs)
         if debug:
-            collections_tree = ''
-            return single_nodes_tree, collections_tree
-        single_nodes_graph, single_nodes_constraints = graphRewriteTransformer(component="LHS").transform(single_nodes_tree)
-        _add_constraints_to_graph(single_nodes_graph, single_nodes_constraints)
+            return parse_tree, None
 
-        # Collections
-        if len(lhs_strs) == 2: # collections part exists
-            collections_lhs = lhs_strs[1]
-            collections_tree = lhs_parser.parse(collections_lhs)
-            if debug:
-                return single_nodes_tree, collections_tree
-            collections_graph, collections_constraints = graphRewriteTransformer(component="LHS").transform(collections_tree)
-            _add_constraints_to_graph(collections_graph, collections_constraints)
-        else: # collections is empty
+        transformer = graphRewriteTransformer(component="LHS")
+        patterns_list = transformer.transform(parse_tree)  # List of (graph, constraints)
+
+        if len(patterns_list) == 1:
+            single_nodes_graph, single_nodes_constraints = patterns_list[0]
             collections_graph = nx.DiGraph()
+            collections_constraints = {}
+        elif len(patterns_list) == 2:
+            single_nodes_graph, single_nodes_constraints = patterns_list[0]
+            collections_graph, collections_constraints = patterns_list[1]
+        else:
+            raise GraphRewriteException("Unexpected number of pattern sets in LHS.")
+
+        _add_constraints_to_graph(single_nodes_graph, single_nodes_constraints)
+        _add_constraints_to_graph(collections_graph, collections_constraints)
 
         return single_nodes_graph, collections_graph
 
