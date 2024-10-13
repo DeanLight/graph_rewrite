@@ -309,16 +309,10 @@ def _add_constraints_to_graph(graph: nx.DiGraph, constraints: dict):
     """
 
     for graph_obj, attr_constraints in constraints.items():
-        for attr_name in attr_constraints:
-            res = attr_constraints[attr_name]
-            if res is None:
-                attr_type_str, attr_value = None, None
-            else:
-                attr_type_str, attr_value = res
-                
+        for attr_name in attr_constraints.keys():
             if graph_obj in graph.nodes:
-                graph.nodes[graph_obj][attr_name] = (attr_type_str, attr_value)
-            else: # Edge
+                graph.nodes[graph_obj][attr_name] = attr_constraints[attr_name]
+            else: # TODO - solve this bug - this code is not accessed when adding an edge with an attribute without a type and value - see example in test below
                 node1, node2 = graph_obj.split("->")
-                graph.edges[node1, node2][attr_name] = (attr_type_str, attr_value)
+                graph.edges[node1, node2][attr_name] = attr_constraints[attr_name]
 

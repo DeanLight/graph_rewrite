@@ -256,9 +256,9 @@ class Rule:
                             raise GraphRewriteException(_exception_msgs["add_attrs_in_p_edge"](s_copy, t_copy))
 
         # Edges in P must have a corresponding LHS edge
-        for p_src, p_dst in self.p.edges(): 
-            if (p_src, p_dst) not in self.rhs.edges():
-                raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_src, p_dst))
+        for p_s, p_t in self.p.edges():
+            if (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.lhs.edges():
+                raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
         
     def _validate_rhs_p(self):
         """Validates the RHS->P homomorphism, and raises appropriate exceptions if it's invalid.
@@ -359,8 +359,9 @@ class Rule:
                 of all nodes in P which are its clones.
         """
         # Find all LHS nodes which are mapped by more than one node in P (in the P->LHS Hom.)
-        return {lhs_node: self._rev_p_lhs[lhs_node] for lhs_node in self.lhs.nodes() if len(self._rev_p_lhs.get(lhs_node, set())) > 1}
-
+        return {lhs_node: self._rev_p_lhs[lhs_node] for lhs_node in self.lhs.nodes() \
+                            if len(self._rev_p_lhs.get(lhs_node, set())) > 1}
+    
     def nodes_to_remove(self) -> set[NodeName]:
         """Find all LHS nodes that should be removed.
 
@@ -406,17 +407,16 @@ class Rule:
             if node_lhs not in self.nodes_to_clone().keys(): # cloned nodes do not remove attrs
                 p_copies = self._rev_p_lhs.get(node_lhs, set())
                 for node_p in p_copies:
-                    # Find all attributes that are in the LHS node but not in the new P node
-                    diff_attrs = set(self._dict_difference(
-                        self.lhs.nodes[node_lhs],
-                        self.p.nodes[node_p]
-                    ).keys())
+                # Find all attributes that are in the LHS node but not in the new P node
+                    lhs_attrs = set(self.lhs.nodes[node_lhs].keys())
+                    p_attrs = set(self.p.nodes[node_p].keys())
+                    diff_attrs = lhs_attrs - p_attrs
                     if len(diff_attrs) != 0:
                         # Remove all such attributes from the P node
                         attrs_to_remove[node_p] = diff_attrs
 
         return attrs_to_remove
-
+    
     def edge_attrs_to_remove(self) -> dict[EdgeName, set]:
         """For each P edge, find all attributes of its corresponding LHS edge
         which should be removed from it in P.
@@ -426,17 +426,16 @@ class Rule:
                 removed from their corresponding LHS edges.
         """
         attrs_to_remove = {}
-        # Add LHS edge attributes to remove
         for s, t in self.lhs.edges():
             s_copies, t_copies = self._rev_p_lhs.get(s, set()), self._rev_p_lhs.get(t, set())
             for s_copy in s_copies:
                 for t_copy in t_copies:
                     # For each "clone of edge (s, t)" that is in P
                     if (s_copy, t_copy) in self.p.edges():
-                        diff_attrs = set(self._dict_difference(
-                            self.lhs.get_edge_data(s, t),
-                            self.p.get_edge_data(s_copy, t_copy)
-                        ).keys())
+                        # Find all attribute names that are in the LHS edge but not in the new P edge
+                        lhs_attrs = set(self.lhs.get_edge_data(s, t).keys())
+                        p_attrs = set(self.p.get_edge_data(s_copy, t_copy).keys())
+                        diff_attrs = lhs_attrs - p_attrs
                         if len(diff_attrs) != 0:
                             # Remove all such attributes
                             attrs_to_remove[(s_copy, t_copy)] = diff_attrs

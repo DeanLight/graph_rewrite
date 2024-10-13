@@ -15,6 +15,7 @@ from typing import Tuple, Iterator
 from collections import defaultdict
 
 # %% ../nbs/03_matcher.ipynb 8
+#TODO: check for strings (if the user inserts the attributes as strings using \"\", and not mentioning the type)
 def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
     """
     Check if the input attributes match the pattern attributes.
