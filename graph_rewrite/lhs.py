@@ -109,12 +109,15 @@ class graphRewriteTransformer(Transformer):
             type, value = None, None
         else:
             attr_name, type, value = args
-
+        #TODO: check that the type and value are consistent in case they are both mentioned.
+        #TODO: check for strings (if the user inserts the attributes as strings using \"\", and not mentioning the type)
+        
         if type is not None and type not in ["int", "str", "bool", "float"]:
             raise GraphRewriteException(f"Type '{type}' is not one of the types supported by the LHS parser: int, str, bool, float or None. If another type is needed, please use the condition function.")
             
         return (attr_name, type, value)
     
+    # TODO: try to minimize the bug that Stav found and see where it fails
     def attributes(self, attributes): # a list of triples 
         # return a packed list of the attribute names.
         attr_names, constraints = {}, {}

@@ -15,8 +15,9 @@ from typing import Tuple, Iterator
 from collections import defaultdict
 
 # %% ../nbs/03_matcher.ipynb 8
-#TODO: check for strings (if the user inserts the attributes as strings using \"\", and not mentioning the type)
-def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
+# TODO: after solving all bugs in notebook 1 switch to this code and delete the code that comes afterwards
+'''
+    def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
     """
     Check if the input attributes match the pattern attributes.
 
@@ -32,16 +33,51 @@ def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
         bool: True if the input attributes match the pattern attributes, False otherwise.
     """
     for attr_name in pattern_attrs:
+        (attr_type,attr_value) = pattern_attrs[attr_name]
+
+        if attr_name not in input_attrs:  # If the attribute does not exist, return False
+            return False
+
+        if attr_type is None and attr_value is None:  # If the user only asked to check for existence, continue
+            continue
+
+        # TODO: check this part and see there are no missing cases
+        if attr_value is not None and input_attrs[attr_name] != attr_value:
+            return False
+        elif attr_type is not None and not isinstance(input_attrs[attr_name], attr_type): 
+            return False
+
+    return True
+    '''
+
+def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
+    """
+    Check if the input attributes match the pattern attributes.
+
+    This function supports both:
+    - Existence checks (ensures that required attributes exist).
+    - Constant value checks (ensures that constant values match).
+
+    Args:
+        pattern_attrs (dict): The pattern attributes.
+        input_attrs (dict): The input attributes.
+
+    Returns:
+        bool: True if the input attributes match the pattern attributes, False otherwise.
+    """
+    
+
+    for attr_name in pattern_attrs:
         if attr_name not in input_attrs:  # If the attribute does not exist, return False
             return False
         
-        if pattern_attrs[attr_name] is None: # #TODO: I added this to bypass the weird behaviour in the lhs_to_graph function, where it doesn't get to the part of the edges attributes - I should fix this later
+        if pattern_attrs[attr_name] is None or pattern_attrs[attr_name] == (None, None): # #TODO: I added this to bypass the weird behaviour in the lhs_to_graph function, where it doesn't get to the part of the edges attributes - I should fix this later
             continue
 
         (attr_type,attr_value) = pattern_attrs[attr_name]
         if pattern_attrs[attr_name] is None: # If the attribute exists, but the value is None, continue to the next attribute
             continue
-
+        
         if input_attrs[attr_name] != attr_value:
             return False
         
@@ -296,7 +332,7 @@ def find_matches(input_graph: DiGraph, single_match_pattern: DiGraph, collection
         Iterator[Match]: Iterator of Match objects, each representing a match of the pattern in the input graph.
     """
     # Find all single nodes matches (single node mapping) based on structure and attributes.
-    # We already inforce set semantics for the mapping, and we don't need to check for duplicates - _find_pattern_based_matches returns unique mappings.
+    # We already enforce set semantics for the mapping, and we don't need to check for duplicates - _find_pattern_based_matches returns unique mappings.
     single_node_mappings = [{pattern_node: {input_node} for pattern_node, input_node in mapping.items()} 
                      for _, mapping in _find_pattern_based_matches(input_graph, single_match_pattern)]
     
