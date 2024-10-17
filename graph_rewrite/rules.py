@@ -157,7 +157,6 @@ class Rule:
             else:
                 raise GraphRewriteException(_exception_msgs["p_not_in_lhs"](p_node))
              
-
     def _create_p_rhs_hom(self):
         """Construct the homomorphism from P to RHS based on the rule.
         Handles merged nodes.
@@ -224,6 +223,10 @@ class Rule:
                 new_dict[key] = target[key]
         return new_dict
 
+    # TODO: need to add a check that there are no contradictions caused by mapping the same input node to a single pattern node and a collection pattern node
+    # For example: 
+    # 1. Removing an node/edge as the single pattern node, but keeping it as the collection pattern node, or vice versa
+    # 2. Removing an attribute from a node/edge in the single pattern node, but keeping it in the collection pattern node, or vice versa
     def _validate_lhs_p(self):
         """Validates the LHS->P homomorphism, and raises appropriate exceptions if it's invalid.
         """
@@ -259,7 +262,11 @@ class Rule:
         for p_s, p_t in self.p.edges():
             if (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.lhs.edges():
                 raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
-        
+
+    # TODO: need to add a check that there are no contradictions caused by mapping the same input node to a single pattern node and a collection pattern node
+    # For example:
+    # 1. Adding an attribute to a node in the single pattern node, and also adding it in the collection pattern node
+    # 2. Assigning different values to the same attribute in the single pattern node and the collection pattern node
     def _validate_rhs_p(self):
         """Validates the RHS->P homomorphism, and raises appropriate exceptions if it's invalid.
         """
@@ -362,6 +369,7 @@ class Rule:
         return {lhs_node: self._rev_p_lhs[lhs_node] for lhs_node in self.lhs.nodes() \
                             if len(self._rev_p_lhs.get(lhs_node, set())) > 1}
     
+    # TODO: Ensure there is no double deletion of nodes/edges or attributes because of mapping the same input node to a single pattern node and a collection pattern node
     def nodes_to_remove(self) -> set[NodeName]:
         """Find all LHS nodes that should be removed.
 
@@ -486,6 +494,7 @@ class Rule:
                     edges_to_add.add((s,t))
         return edges_to_add
 
+    # TODO: Ensure there is no double addition of attributes because of mapping the same input node to a single pattern node and a collection pattern node
     def node_attrs_to_add(self) -> dict[NodeName, dict]:
         """For each RHS node, find all attributes (and values) of its corresponding P node(s)
         which should be added to the RHS node.
