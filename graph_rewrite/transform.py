@@ -368,7 +368,7 @@ def _log(msg: str, is_log: bool, color: str = _BLACK):
 
 # %% ../nbs/06_transform.ipynb 22
 def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: dict[NodeName, set[NodeName]],
-                               is_log: bool) -> dict[NodeName, list[NodeName]]:
+                               is_log: bool) -> dict[NodeName, set[NodeName]]:
     """Performs the restrictive phase of the rewriting process on some match: Clone nodes, Remove nodes and edges (and/or their attributes).
 
     Args:
@@ -383,8 +383,7 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
 
     # Initialize an empty mapping from P nodes to input_graph nodes
     # We support set semantics to keep the same format for single nodes and collections
-    # We use a list instead of a set because set is not hashable, and we need to be able to iterate over it
-    p_input_map = defaultdict(list) # dict[NodeName, list[NodeName]]
+    p_input_map = defaultdict(set) # dict[NodeName, set[NodeName]]
 
     """Clone nodes:
         Find all LHS nodes that should be cloned (and what are their clones in P).
@@ -399,14 +398,14 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
                 # Handle the case where the node is reused directly from lhs_input_map
                 for node in lhs_input_map[cloned_lhs_node]:
                     _log(f"Clone {node}", is_log)
-                    p_input_map[p_clone].append(node)
+                    p_input_map[p_clone].add(node)
                 cloned_to_flags_map[cloned_lhs_node] = True
             else:
                 # Create new clones
                 for node in lhs_input_map[cloned_lhs_node]:
                     new_clone_id = _clone_node(input_graph, node)
                     _log(f"Clone {node} as {new_clone_id}", is_log)
-                    p_input_map[p_clone].append(new_clone_id)
+                    p_input_map[p_clone].add(new_clone_id)
 
 
     # Remove nodes, create p_input_map out of the nodes that are preserved
@@ -421,26 +420,29 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
             # Add the corresponding node(s) in the input graph to the p_input_map
             for input_node in lhs_input_map[node_name]:
                 p_node = list(rule._rev_p_lhs[node_name])[0]
-                p_input_map[p_node].append(input_node)
+                p_input_map[p_node].add(input_node)
     
     # Remove edges
     for src_name, dst_name in rule.edges_to_remove():
         for src_node, dst_node in product(lhs_input_map[src_name], lhs_input_map[dst_name]):
-            _log(f"Remove edge {src_node, dst_node}", is_log)
-            _remove_edge(input_graph, (src_node, dst_node))
+            # Since we support the collections feature, the mapping has all possible assignements for each node, and so we need to ensure that this edge actually exists
+            if (src_node, dst_node) in input_graph.edges():
+                _log(f"Remove edge {src_node, dst_node}", is_log)
+                _remove_edge(input_graph, (src_node, dst_node))
 
     # Remove node attributes
     for node_name, attrs_to_remove in rule.node_attrs_to_remove().items():
         for input_node in lhs_input_map[node_name]:
             _log(f"Remove attrs {attrs_to_remove} from node {input_node}", is_log)
-            _remove_node_attrs(input_graph, input_node, attrs_to_remove)
-            
+            _remove_node_attrs(input_graph, input_node, attrs_to_remove)            
     
     # Remove edge attributes
     for edge_name, attrs_to_remove in rule.edge_attrs_to_remove().items():
         for src_node, dst_node in product(lhs_input_map[edge_name[0]], lhs_input_map[edge_name[1]]):
-            _log(f"Remove attrs {attrs_to_remove} from edge {src_node, dst_node}", is_log)  
-            _remove_edge_attrs(input_graph, (src_node, dst_node), attrs_to_remove)
+            # Since we support the collections feature, the mapping has all possible assignements for each node, and so we need to ensure that this edge actually exists
+            if (src_node, dst_node) in input_graph.edges():
+                _log(f"Remove attrs {attrs_to_remove} from edge {src_node, dst_node}", is_log)
+                _remove_edge_attrs(input_graph, (src_node, dst_node), attrs_to_remove)
   
     return p_input_map
 
@@ -457,8 +459,7 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
         
     # Initialize an empty mapping from RHS nodes to input_graph nodes.
     # We support set semantics to keep the same format for single nodes and collections
-    # We use a list instead of a set because set is not hashable, and we need to be able to iterate over it
-    rhs_input_map = defaultdict(list) # dict[NodeName, list[NodeName]]
+    rhs_input_map = defaultdict(set) # dict[NodeName, set[NodeName]]
 
     """Merge nodes:
         Find all RHS nodes that are a merge of P nodes (and what P nodes they merge).
@@ -468,10 +469,13 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
     """
     merge_rhs_nodes = rule.nodes_to_merge().keys()
     for merge_rhs_node, p_merged in rule.nodes_to_merge().items():
-        input_nodes_to_merge = {p_input_map[p_node] for p_node in p_merged}
+        input_nodes_to_merge = set()
+        for p_node in p_merged:
+            for node in p_input_map[p_node]:
+                input_nodes_to_merge.add(node)
         new_merged_id = _merge_nodes(input_graph, input_nodes_to_merge, rule.merge_policy)
         _log(f"Merge {input_nodes_to_merge} as {new_merged_id}", is_log)
-        rhs_input_map[merge_rhs_node].append(new_merged_id)
+        rhs_input_map[merge_rhs_node].add(new_merged_id)
         
     """Add nodes, complete RHS->input mapping with added (and preserved) nodes:
         Find all RHS nodes that should be added to the input (not including nodes that are a merge of P nodes).
@@ -482,11 +486,11 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
         if rhs_node in rule.nodes_to_add():
             added_id = _add_node(input_graph, rhs_node)
             _log(f"Add node {rhs_node} as {added_id}", is_log)
-            rhs_input_map[rhs_node].append(added_id)
+            rhs_input_map[rhs_node].add(added_id)
         elif rhs_node not in merge_rhs_nodes:
             p_node = list(rule._rev_p_rhs[rhs_node])[0]
-            rhs_input_map[rhs_node].append(p_input_map[p_node][0])
-        #TODO: check - is it ok there is no else here?
+            for input_node in p_input_map[p_node]:
+                rhs_input_map[rhs_node].add(input_node)
 
     # Add edges.
     for src_name, dst_name in rule.edges_to_add():
@@ -503,8 +507,10 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
     # Add edge attrs.
     for (rhs_src, rhs_target), attrs_to_add in rule.edge_attrs_to_add().items(): 
         for src_node, dst_node in product(rhs_input_map[rhs_src], rhs_input_map[rhs_target]):
-            _log(f"Added attrs {attrs_to_add} to edge {src_node, dst_node}", is_log)
-            _add_edge_attrs(input_graph, (src_node, dst_node), attrs_to_add)
+            # Since we support the collections feature, the mapping has all possible assignements for each node, and so we need to ensure that this edge actually exists
+            if (src_node, dst_node) in input_graph.edges():
+                _log(f"Added attrs {attrs_to_add} to edge {src_node, dst_node}", is_log)
+                _add_edge_attrs(input_graph, (src_node, dst_node), attrs_to_add)
 
 # %% ../nbs/06_transform.ipynb 25
 def _copy_graph(graph: DiGraph) -> DiGraph:

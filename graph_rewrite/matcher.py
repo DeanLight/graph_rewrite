@@ -262,17 +262,12 @@ def _find_intersecting_pattern_nodes(single_nodes_pattern: DiGraph, collection_p
     return list(single_nodes_pattern_nodes.intersection(collection_pattern_nodes))
 
 # %% ../nbs/03_matcher.ipynb 20
-def _add_collections_to_single_nodes_matches(input_graph: DiGraph, single_match_pattern: DiGraph ,collection_pattern: DiGraph, 
+def _find_matches_with_collections(input_graph: DiGraph, single_match_pattern: DiGraph ,collection_pattern: DiGraph, 
                                       single_nodes_matches: List[Dict[NodeName, Set[NodeName]]], intersecting_pattern_nodes: List[NodeName],
                                       condition: FilterFunc = lambda match : True, filter: bool = True, warn_on_collisions: bool = True
                                       )-> list[Dict[NodeName, List[NodeName]]]:
     """
-    Add collection matches to the existing single nodes matches by finding subgraph matches for collection pattern nodes
-    and merging them with the given single nodes match mapping.
-
-    This function finds matches in the input graph that satisfy both the single nodes match pattern (pattern nodes 
-    that aim to match single nodesly one input node) and the collection pattern (pattern nodes that aim to match 
-    multiple input nodes).
+    Find all matches in the input graph that match the given single nodes match pattern and collection pattern.
 
     Args:
         input_graph (DiGraph): The input graph.
@@ -297,13 +292,16 @@ def _add_collections_to_single_nodes_matches(input_graph: DiGraph, single_match_
 
         # Find collection matches using the locked pattern
         for _, collection_mapping in _find_pattern_based_matches(input_graph_copy, collection_pattern_copy):
-            # Filter matches based on the condition
             match = mapping_to_match(input_graph, single_match_pattern, collection_pattern, collection_mapping, warn_on_collisions)
             if (filter and condition(match)) or not filter:
                 # Add the collection nodes mapping (not including the intersecting pattern nodes) to the single nodes match mapping
                 for collection_pattern_node, matched_input_nodes in collection_mapping.items():
                     if collection_pattern_node not in intersecting_pattern_nodes:
                         mapping.setdefault(collection_pattern_node, set()).add(matched_input_nodes)
+
+    # If the collection pattern is not an empty graph, we need to remove mappings that do not include all collection nodes
+    if len(collection_pattern.nodes) > 0:
+        single_nodes_matches = [mapping for mapping in single_nodes_matches if all(node in mapping for node in collection_pattern.nodes)]
 
     # Now all mappings are enriched with the collection matches, we can convert the mappings to matches, and filter out duplicates
     matches = [mapping_to_match(input_graph, single_match_pattern, collection_pattern, mapping, warn_on_collisions) for mapping in single_nodes_matches]
@@ -349,7 +347,7 @@ def find_matches(input_graph: DiGraph, single_match_pattern: DiGraph, collection
         # all single node mappings after filtering based on the condition
         filtered_single_node_mappings = [mapping for mapping,_ in filtered_single_node_mapping_with_matches]
         # Add collections to single nodes matches
-        filtered_matches = _add_collections_to_single_nodes_matches(input_graph, single_match_pattern, collections_pattern, 
+        filtered_matches = _find_matches_with_collections(input_graph, single_match_pattern, collections_pattern, 
                                                                              filtered_single_node_mappings, intersecting_pattern_nodes, 
                                                                              condition, filter, warn_on_collisions)
     else:
