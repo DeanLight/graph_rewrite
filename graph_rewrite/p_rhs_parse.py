@@ -33,7 +33,7 @@ p_parser = Lark(r"""
 
     empty:
     pattern: vertex (connection vertex)*
-    patterns: pattern (";" pattern)* | empty
+    patterns: pattern ("," pattern)* | empty 
 
     """, parser="lalr", start='patterns' , debug=True)
 
@@ -67,7 +67,7 @@ rhs_parser = Lark(r"""
 
     empty:
     pattern: vertex (connection vertex)*
-    patterns: pattern (";" pattern)* | empty
+    patterns: pattern ("," pattern)* | empty
 
     """, parser="lalr", start='patterns' , debug=True)
 

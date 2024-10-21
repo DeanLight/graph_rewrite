@@ -7,103 +7,180 @@ __all__ = ['FilterFunc', 'find_matches']
 from typing import *
 from networkx import DiGraph
 from networkx.algorithms import isomorphism # check subgraph's isom.
-import itertools # iterating over all nodes\edges combinations
-
 from .core import NodeName, _create_graph, draw
 from .lhs import lhs_to_graph
-from .match_class import Match, mapping_to_match, is_anonymous_node,draw_match
+from .match_class import Match, mapping_to_match ,draw_match
+from itertools import product
+from typing import Tuple, Iterator
+from collections import defaultdict
 
 # %% ../nbs/03_matcher.ipynb 8
-def _attributes_exist(input_graph_attrs: dict, pattern_attrs: dict) -> bool:
-    """Given an input-graph node and a pattern node, checks whether the input-graph node
-    has all the attributes which the pattern node requires. If it does, then this input-graph node might be matched as that pattern node.
-    
-    Note that we only refer to the existence of attributes here, i.e. if both nodes have the same attributes but with
-    different values, this function still considers them as a potential pair to match.
+def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
+    """
+    Check if the input attributes match the pattern attributes.
+
+    This function supports both:
+    - Existence checks (ensures that required attributes exist).
+    - Constant value checks (ensures that constant values match).
 
     Args:
-        input_graph_attrs (dict): Attributes of some input-graph node.
-        pattern_attrs (dict): Attributes of some pattern-graph node.
+        pattern_attrs (dict): The pattern attributes.
+        input_attrs (dict): The input attributes.
 
     Returns:
-        bool: True if the input-graph node has all the attributes which the pattern node requires, False otherwise.
+        bool: True if the input attributes match the pattern attributes, False otherwise.
     """
-    return set(pattern_attrs.keys()).issubset(set(input_graph_attrs.keys()))
+    for attr_name in pattern_attrs:
+        (attr_type,attr_value) = pattern_attrs[attr_name]
+
+        if attr_name not in input_attrs:  # If the attribute does not exist, return False
+            return False
+
+        if attr_type is None and attr_value is None:  # If the user only asked to check for existence, continue
+            continue
+
+        if attr_value is not None and input_attrs[attr_name] != attr_value:
+            return False
+        elif attr_type is not None and not isinstance(input_attrs[attr_name], attr_type): 
+            return False
+
+    return True
+    
+
 
 # %% ../nbs/03_matcher.ipynb 10
-def _does_node_match_pattern(graph_node_attrs: dict, pattern: DiGraph) -> bool:
-    """Given the attributes of some input-graph node, checks whether this node
-    has the same attributes as some node in the pattern graph. If it does,
-    then the node by match that node in the pattern - and thus, might be included
-    in a subgraph that will match the entire pattern.
+def _find_input_nodes_candidates(pattern_node: NodeName, pattern: DiGraph, input_graph: DiGraph) -> set[NodeName]:
+    """
+    Given a pattern node and an input graph, return a set of input graph nodes that:
+    - Contain the required attributes of the pattern node, including constant value checks (if specified) and existence checks (if no value is specified / no constant value).
+    - Have at least one edge with matching attributes for each edge of the pattern node that has attributes specified.
 
     Args:
-        graph_node_attrs (dict): Attributes of some input-graph node.
-        pattern (DiGraph): A pattern graph produced by the LHS Parser.
+        pattern_node (NodeName): The pattern node.
+        pattern (DiGraph): The pattern graph.
+        input_graph (DiGraph): The input graph.
 
     Returns:
-        bool: True if the input-graph node has the same attributes as some pattern node, False otherwise.
+        set[NodeName]: A set of input graph nodes that match the required attributes and have at least one matching edge.
     """
-    return any([_attributes_exist(graph_node_attrs, pattern_attr) for (_, pattern_attr) in pattern.nodes(data=True)])
+    pattern_attrs = pattern.nodes[pattern_node] # {attr_name: (attr_type,attr_value)}
 
-# %% ../nbs/03_matcher.ipynb 12
-def _find_structural_matches(graph: DiGraph, pattern: DiGraph) -> Tuple[DiGraph, dict[NodeName, NodeName]]:
-    """Given a graph, find all of its subgraphs which have the same structure (same nodes and edges)
-    as a given pattern DiGraph. That is, all subgraphs which are isomorphic to the pattern.
+    #check if _id is in the pattern_node_attrs, if so, we will only check the node with the same _id
+    if "_id" in pattern_attrs:
+        input_node_id = pattern_attrs.pop("_id")[1]
+        input_nodes_to_check = [input_node_id]
+    else:
+        input_nodes_to_check = list(input_graph.nodes)
+
+    # Filter nodes by attributes first
+    candidate_nodes = {
+        input_node
+        for input_node in input_nodes_to_check
+        if _attributes_match(pattern_attrs, input_graph.nodes[input_node])
+    }
+
+    return candidate_nodes
+
+# %% ../nbs/03_matcher.ipynb 11
+# Helper function to check if an input edge matches the pattern edge
+def _is_valid_edge_candidate(input_graph: DiGraph, pattern_edge_attrs: dict, 
+                   src_candidate: NodeName, dst_candidate: NodeName, 
+                   src_pattern_node: NodeName, dst_pattern_node: NodeName) -> bool:
+    """
+    Check if an edge between two input nodes matches the pattern edge and attributes.
 
     Args:
-        graph (DiGraph): A graph to find matches in
-        pattern (DiGraph): A pattern graph produced by the LHS Parser.
-
-    Yields:
-        Iterator[Tuple[DiGraph, dict[NodeName, NodeName]]]: Iterator of (subgraph, mapping) tuples,
-            where for each pair, the subgraph is the subset of nodes and edges in the input graph that
-            match the pattern, and the mapping is a dictionary that maps nodes in that subgraph
-            to nodes in the pattern.
-    """
-    for sub_nodes in itertools.combinations(graph.nodes, len(pattern.nodes)):
-        nodes_subg: DiGraph = graph.subgraph(sub_nodes)
-        for sub_edges in itertools.combinations(nodes_subg.edges(data=True), len(pattern.edges)):
-            # Create a subgraph with selected edges and nodes
-            subg = DiGraph()
-            subg.add_nodes_from(list(nodes_subg.nodes(data=True)))
-            subg.add_edges_from(list(sub_edges))
-
-            # Find structural matches with the selected edges and nodes
-            matcher = isomorphism.DiGraphMatcher(pattern, subg)
-            for isom_mapping in matcher.isomorphisms_iter():
-                yield (nodes_subg, isom_mapping)
-
-# %% ../nbs/03_matcher.ipynb 14
-def _does_isom_match_pattern(isom: Tuple[DiGraph, dict], pattern: DiGraph) -> bool:
-    """Given a graph that is isomorphic to the pattern, checks whether they also
-    match in terms of their attributes (that is, the graph has the same attributes
-    as the pattern). If they does, then the isomorphic graph matches the pattern completely.
-
-    Args:
-        isom (Tuple[DiGraph, dict]): A graph that's isomorphic to the pattern
-        pattern (DiGraph): A pattern graph produced by the LHS Parser.
+        input_graph (DiGraph): The input graph.
+        pattern_edge_attrs (dict): Attributes of the pattern edge to match.
+        src_candidate (NodeName): The source candidate node in the input graph.
+        dst_candidate (NodeName): The destination candidate node in the input graph.
+        src_pattern_node (NodeName): The source pattern node.
+        dst_pattern_node (NodeName): The destination pattern node.
 
     Returns:
-        bool: True if the isomorphic graph matches the pattern, False otherwise.
+        bool: True if the input edge is valid, False otherwise.
     """
-
-    # check nodes match
-    subgraph, mapping = isom
-    if not all([_attributes_exist(subgraph.nodes[original_node], pattern.nodes[pattern_node]) \
-                for (pattern_node, original_node) in mapping.items()]):
+    if (src_candidate, dst_candidate) not in input_graph.edges:
         return False
 
-    # check edges match
-    if all([_attributes_exist(subgraph.edges[mapping[edge[0]], mapping[edge[1]]], edge[2]) \
-                for edge in pattern.edges(data=True)]):
-        return True
+    input_edge_attrs = input_graph.get_edge_data(src_candidate, dst_candidate, default={})
+    if not _attributes_match(pattern_edge_attrs, input_edge_attrs):
+        return False
 
-# %% ../nbs/03_matcher.ipynb 16
+    # Special case - self loops in pattern graph: If the source and destination are the same node in the pattern,
+    # ensure the source and destination candidates are also the same in the input graph
+    if src_pattern_node == dst_pattern_node and src_candidate != dst_candidate:
+        return False
+
+    return True
+
+# %% ../nbs/03_matcher.ipynb 13
+def _find_pattern_based_matches(graph: DiGraph, pattern: DiGraph) -> Iterator[Tuple[DiGraph, Dict[NodeName, NodeName]]]:
+    """
+    Find all subgraphs in the input graph that match the given pattern graph based on both structure (nodes and edges)
+    and attributes (existence of attributes or constant value checks).
+    
+    Args:
+        graph (DiGraph): The graph to search for matches.
+        pattern (DiGraph): The pattern graph representing the structure and attributes to match.
+    
+    Yields:
+        Iterator[Tuple[DiGraph, Dict[NodeName, NodeName]]]: Tuples of (subgraph, mapping),
+        where subgraph is the matched subgraph, and mapping is a dictionary mapping nodes in the
+        subgraph to nodes in the pattern.
+    """
+    map_pattern_nodes_to_candidates = {pattern_node: _find_input_nodes_candidates(pattern_node, pattern, graph)
+                                       for pattern_node in pattern.nodes}
+    
+    pattern_nodes = list(map_pattern_nodes_to_candidates.keys())  # List of pattern nodes
+    candidate_sets = list(map_pattern_nodes_to_candidates.values())  # List of candidate sets, matches the indexes of pattern_nodes
+    
+    # All possible assignments of input nodes to pattern nodes, where each input node is assigned to exactly one pattern node
+    # that matches the pattern node's attributes (existence checks and constant value checks)
+    assignments = [{pattern_node: input_node for pattern_node, input_node in zip(pattern_nodes, assignment)}
+                   for assignment in product(*candidate_sets)]
+    
+    # Filter assignments that map the same input node to multiple pattern nodes or have mismatching edges
+    valid_assignments = []
+    for assignment in assignments:
+        # Check if any input node is mapped to multiple pattern nodes
+        input_node_counts = defaultdict(int) # automatically initializes to 0
+        for input_node in assignment.values():
+            input_node_counts[input_node] += 1
+            if input_node_counts[input_node] > 1:
+                break  # Skip assignment if duplicate nodes found
+        else:
+            # Check if edges between input nodes match the edges in the pattern 
+            # (existence checks, and attributes check based on attribute existence and constant values)
+            for (src_pattern_node, dst_pattern_node) in pattern.edges:
+                src_input_node = assignment[src_pattern_node]
+                dst_input_node = assignment[dst_pattern_node]
+                pattern_edge_attrs = pattern.edges[src_pattern_node, dst_pattern_node]
+                if not _is_valid_edge_candidate(graph, pattern_edge_attrs,
+                                                src_input_node, dst_input_node, src_pattern_node, dst_pattern_node):
+                    break
+            else:
+                valid_assignments.append(assignment)
+
+    # We take the valid assignments and create a subgraph from them, using the matching nodes and edges from the input graph
+    for assignment in valid_assignments:
+        subgraph = DiGraph()
+        subgraph.add_nodes_from(set(assignment.values()))
+        for src_pattern_node, dst_pattern_node in pattern.edges:
+            src_input_node = assignment[src_pattern_node]
+            dst_input_node = assignment[dst_pattern_node]
+            subgraph.add_edge(src_input_node, dst_input_node)
+
+        # Validate subgraph for isomorphism
+        if isomorphism.is_isomorphic(subgraph, pattern, node_match=_attributes_match, edge_match=_attributes_match):
+            yield subgraph, assignment
+
+
+# %% ../nbs/03_matcher.ipynb 15
 FilterFunc = Callable[[Match], bool]
 
-# %% ../nbs/03_matcher.ipynb 19
-def _remove_duplicated_matches(matches: list[Match]) -> Match:
+# %% ../nbs/03_matcher.ipynb 18
+def _filter_duplicated_matches(matches: list[Match]) -> Iterator[Match]:
     """Remove duplicates from a list of Matches, based on their mappings. Return an iterator of the matches without duplications.
 
     Args:
@@ -112,44 +189,138 @@ def _remove_duplicated_matches(matches: list[Match]) -> Match:
     Yields:
         Iterator[list[Match]]: Iterator of the matches without duplications.
     """
-    new_list = []
+
+    # We can't use a set directly because Match objects are not hashable. 
+    # This is why we use a list of matche's mappings to check for duplicates.
+    mappings = []
     for match in matches:
-        if match not in new_list:
-            new_list.append(match)
+        if match.mapping not in mappings:
+            mappings.append(match.mapping)
             yield match
 
-# %% ../nbs/03_matcher.ipynb 21
-def find_matches(input_graph: DiGraph, pattern: DiGraph, condition: FilterFunc = lambda match: True) -> Match:
-    """Find all matches of a pattern graph in an input graph, for which a certain condition holds.
-    That is, subgraphs of the input graph which have the same nodes, edges, attributes and required attribute values
-    as the pattern defines, which satisfy any additional condition the user defined.
+# %% ../nbs/03_matcher.ipynb 19
+def _find_intersecting_pattern_nodes(single_nodes_pattern: DiGraph, collection_pattern: DiGraph) -> list:
+    """
+    Find the intersecting pattern nodes between the single nodes match pattern and the collection pattern.
+
+    The intersecting pattern nodes are those that appear in both the single nodes match pattern 
+    (i.e., pattern nodes that aim to match a single, unique input node) and the collection pattern 
+    (i.e., pattern nodes that aim to match multiple input nodes).
 
     Args:
-        input_graph (DiGraph): A graph to find matches in
-        pattern (DiGraph): A pattern graph produced by the LHS Parser.
-        condition (FilterFunc, optional): A function which recives a Match objects, and checks whether some condition holds
-            for the corresponding match. Defaults to a condition function which always returns True.
+        single_nodes_pattern (DiGraph): The pattern graph representing nodes that match single nodesly one input node.
+        collection_pattern (DiGraph): The pattern graph representing nodes that match multiple input nodes.
 
-    Yields:
-        Iterator[Match]: Iterator of Match objects (without duplications), each corresponds to a match of the pattern in the input graph.
+    Returns:
+        list: A list of pattern nodes that are present in both the single nodes match pattern and the collection pattern.
     """
 
-    # Narrow down search space by keeping only input-graph nodes that have the same attributes as some pattern node
-    matching_nodes = [n for (n, attrs) in input_graph.nodes(data=True) if _does_node_match_pattern(attrs, pattern)]
-    # Reducing the input graph to the matching nodes + connected edges
-    reduced_input_g = input_graph.subgraph(matching_nodes)
+    single_nodes_pattern_nodes = set(single_nodes_pattern.nodes)
+    collection_pattern_nodes = set(collection_pattern.nodes)
     
-    # Find all structural matches (isomorphisms), ignore attributes
-    isom_matches =  [match for match in _find_structural_matches(reduced_input_g, pattern)]
-    # Find matches with attributes among isoms (match pattern's attributes)
-    attribute_matches = [mapping for (subgraph, mapping) in isom_matches if _does_isom_match_pattern((subgraph, mapping), pattern)]
+    return list(single_nodes_pattern_nodes.intersection(collection_pattern_nodes))
 
-    # construct a list of Match objects. Note that the condition is checked on a Match that includes anonymous nodes (as it might use it)
-    # but the Match that we return does not include the anonymous parts.
-    # Therefore, we first construct a list of tuples - the first is the mapping with anonymous, the second isn't
-    matches_list = [(mapping_to_match(input_graph, pattern, mapping, filter=False), mapping_to_match(input_graph, pattern, mapping)) 
-                    for mapping in attribute_matches]
-    # Then filter the list, to contain only the filtered match whose unfiltered version matches the condition
-    filtered_matches =  [filtered_match for (unfiltered_match, filtered_match) in matches_list if condition(unfiltered_match)]
-    # And finally, remove duplicates (might be created because we removed the anonymous nodes)
-    yield from _remove_duplicated_matches(filtered_matches)
+# %% ../nbs/03_matcher.ipynb 20
+def _find_matches_with_collections(input_graph: DiGraph, single_match_pattern: DiGraph ,collection_pattern: DiGraph, 
+                                      single_nodes_matches: List[Dict[NodeName, Set[NodeName]]], intersecting_pattern_nodes: List[NodeName],
+                                      condition: FilterFunc = lambda match : True, filter: bool = True, warn_on_collisions: bool = True
+                                      )-> list[Dict[NodeName, List[NodeName]]]:
+    """
+    Find all matches in the input graph that match the given single nodes match pattern and collection pattern.
+
+    Args:
+        input_graph (DiGraph): The input graph.
+        single_match_pattern (DiGraph): The pattern graph representing nodes that match single nodesly one input node.
+        collection_pattern (DiGraph): The pattern graph representing nodes that match multiple input nodes.
+        single_nodes_matches (List[Dict[NodeName, List[NodeName]]]): A list of mappings for single nodes matches, in list semantics.
+        intersecting_pattern_nodes (List[NodeName]): A list of pattern nodes that are present in both the single nodes match pattern and the collection pattern.
+
+    Yields:
+        list[Dict[NodeName, List[NodeName]]]: A list of mappings that include the single nodes match mapping and the collection matches.
+    """
+
+    input_graph_copy = input_graph.copy()
+
+    # Enrich the single nodes match mapping with the corresponding collection matches.
+    for mapping in list(single_nodes_matches):  # We need to iterate over a copy of the list to avoid modifying it while iterating
+        # Lock intersecting pattern nodes to their corresponding input node in the single nodes match
+        collection_pattern_copy = collection_pattern.copy()
+        for intersecting_pattern_node in intersecting_pattern_nodes:
+            intersecting_input_node = list(mapping[intersecting_pattern_node])[0]  # When we get here, we know that the single nodes match has only one node for each intersecting pattern node - we can take the first element
+            collection_pattern_copy.nodes[intersecting_pattern_node]['_id'] = (None,intersecting_input_node)  # Lock the intersecting pattern node to the corresponding input node
+
+        # Find collection matches using the locked pattern
+        for _, collection_mapping in _find_pattern_based_matches(input_graph_copy, collection_pattern_copy):
+            match = mapping_to_match(input_graph, single_match_pattern, collection_pattern, collection_mapping, warn_on_collisions)
+            if (filter and condition(match)) or not filter:
+                # Add the collection nodes mapping (not including the intersecting pattern nodes) to the single nodes match mapping
+                for collection_pattern_node, matched_input_nodes in collection_mapping.items():
+                    if collection_pattern_node not in intersecting_pattern_nodes:
+                        mapping.setdefault(collection_pattern_node, set()).add(matched_input_nodes)
+
+    # If the collection pattern is not an empty graph, we need to remove mappings that do not include all collection nodes
+    if len(collection_pattern.nodes) > 0:
+        single_nodes_matches = [mapping for mapping in single_nodes_matches if all(node in mapping for node in collection_pattern.nodes)]
+
+    # Now all mappings are enriched with the collection matches, we can convert the mappings to matches, and filter out duplicates
+    matches = [mapping_to_match(input_graph, single_match_pattern, collection_pattern, mapping, warn_on_collisions) for mapping in single_nodes_matches]
+    return list(_filter_duplicated_matches(matches))
+
+# %% ../nbs/03_matcher.ipynb 22
+def find_matches(input_graph: DiGraph, single_match_pattern: DiGraph, collections_pattern: DiGraph = None, 
+                 condition: FilterFunc = lambda match : True, filter: bool = True, warn_on_collisions: bool = True
+                 ) -> Iterator[Match]:
+    """
+    Find all matches of a pattern graph in an input graph, satisfying a certain condition.
+
+    This function identifies subgraphs of the input graph that match the single match pattern 
+    and the collections pattern (if provided) based on structure, attributes, and additional conditions 
+    specified by the user.
+
+    Args:
+        input_graph (DiGraph): The input graph.
+        single_match_pattern (DiGraph): The pattern graph representing nodes that match single nodesly one input node.
+        collections_pattern (DiGraph, optional): The pattern graph representing nodes that match multiple input nodes. Defaults to None.
+        condition (FilterFunc, optional): A function that filters matches based on additional conditions. Defaults to lambda match : True.
+        filter (bool, optional): Whether to filter out duplicate matches. Defaults to True.
+        warn_on_collisions (bool, optional): Whether to warn on collisions. Defaults to True.
+
+    Yields:
+        Iterator[Match]: Iterator of Match objects, each representing a match of the pattern in the input graph.
+    """
+    # Find all single nodes matches (single node mapping) based on structure and attributes.
+    # We already enforce set semantics for the mapping, and we don't need to check for duplicates - _find_pattern_based_matches returns unique mappings.
+    single_node_mappings = [{pattern_node: {input_node} for pattern_node, input_node in mapping.items()} 
+                     for _, mapping in _find_pattern_based_matches(input_graph, single_match_pattern)]
+    
+    # Tuple of (mapping, match) for each single node mapping
+    single_node_mapping_with_matches = [(mapping,(mapping_to_match(input_graph, single_match_pattern, collections_pattern, mapping, warn_on_collisions)))
+        for mapping in single_node_mappings]
+    
+    # Tuple of (mapping, match) for each single node match that satisfies the condition
+    filtered_single_node_mapping_with_matches = [(mapping,match) for mapping,match in single_node_mapping_with_matches if (filter and condition(match)) or not filter]
+
+    # If a collections pattern is not None, enrich single matches by adding matching collections.
+    if collections_pattern:
+        intersecting_pattern_nodes = _find_intersecting_pattern_nodes(single_match_pattern, collections_pattern)
+        # all single node mappings after filtering based on the condition
+        filtered_single_node_mappings = [mapping for mapping,_ in filtered_single_node_mapping_with_matches]
+        # Add collections to single nodes matches
+        filtered_matches = _find_matches_with_collections(input_graph, single_match_pattern, collections_pattern, 
+                                                                             filtered_single_node_mappings, intersecting_pattern_nodes, 
+                                                                             condition, filter, warn_on_collisions)
+    else:
+        # If a collections pattern is None, the matches are the same as the filtered single node matches
+        filtered_matches = [match for _, match in filtered_single_node_mapping_with_matches]
+
+    # Moved it to both single and collection matches to reduce steps
+    # matches = [(mapping_to_match(input_graph, single_match_pattern, collections_pattern, mapping, warn_on_collisions))
+    #     for mapping in mappings]        
+    # filtered_matches = [match for match in matches if condition(match)]
+
+    # remove anonymous nodes and edges - I had to split this from the previous loop because it was causing a bug (it inserted none matches)
+    for match in filtered_matches:
+        match.remove_anonymous_nodes_and_edges()
+
+    # Remove any duplicate matches
+    yield from _filter_duplicated_matches(filtered_matches)
