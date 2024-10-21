@@ -108,16 +108,13 @@ class graphRewriteTransformer(Transformer):
             attr_name = args[0]
             type, value = None, None
         else:
-            attr_name, type, value = args
-        #TODO: check that the type and value are consistent in case they are both mentioned.
-        #TODO: check for strings (if the user inserts the attributes as strings using \"\", and not mentioning the type)
+            attr_name, type, value = args       
         
         if type is not None and type not in ["int", "str", "bool", "float"]:
             raise GraphRewriteException(f"Type '{type}' is not one of the types supported by the LHS parser: int, str, bool, float or None. If another type is needed, please use the condition function.")
             
         return (attr_name, type, value)
     
-    # TODO: try to minimize the bug that Stav found and see where it fails
     def attributes(self, attributes): # a list of triples 
         # return a packed list of the attribute names.
         attr_names, constraints = {}, {}
@@ -125,7 +122,7 @@ class graphRewriteTransformer(Transformer):
             # will be added to the graph itself
             attr_name, type, value = attribute
             if self.component == "LHS":
-                attr_names[str(attr_name)] = None 
+                attr_names[str(attr_name)] = (None, None)
                 # will be added to the condition function
                 constraints[str(attr_name)] = (type, value) 
             else:
@@ -316,7 +313,7 @@ def _add_constraints_to_graph(graph: nx.DiGraph, constraints: dict):
         for attr_name in attr_constraints.keys():
             if graph_obj in graph.nodes:
                 graph.nodes[graph_obj][attr_name] = attr_constraints[attr_name]
-            else: # TODO - solve this bug - this code is not accessed when adding an edge with an attribute without a type and value - see example in test below
+            else: 
                 node1, node2 = graph_obj.split("->")
                 graph.edges[node1, node2][attr_name] = attr_constraints[attr_name]
 
