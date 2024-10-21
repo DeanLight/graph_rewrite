@@ -98,7 +98,7 @@ class Rule:
         self.single_nodes_lhs = single_nodes_lhs
         self.collections_lhs = collections_lhs
         self.lhs = self._create_lhs_graph()
-        self.p = p if p else self.lhs.copy()
+        self.p = p if p else self.lhs_p_copy(self.lhs)
         self.rhs = rhs if rhs else self.p.copy()
         self.merge_policy = merge_policy
 
@@ -222,6 +222,23 @@ class Rule:
             elif key not in other:
                 new_dict[key] = target[key]
         return new_dict
+    
+    def lhs_p_copy(self, G: DiGraph):
+        '''Copy a graph (specifically lhs graph), to the format of a p graph.
+        When the input p is None we choose p to be exactly the lhs, except the attributes are set to (None, None), to support 
+        input of the shape NodeName[attribute1]-[attribute2]->NodeName2 with no need to specify the attribute value'''
+        H = DiGraph()
+        for node, attrs in G.nodes(data=True):
+            H.add_node(node, **{key: (None, None) for key in attrs})
+        for u, v, attrs in G.edges(data=True):
+            H.add_edge(u, v, **{key: (None, None) for key in attrs})
+
+        return H
+    
+    def format_value_attribute(self, d: dict):
+        '''Change an input dictionary of {attribute_name:(type,value)} format to {attribute_name:value} format
+        '''
+        return {key:d[key][1] for key in d}
 
     # TODO: need to add a check that there are no contradictions caused by mapping the same input node to a single pattern node and a collection pattern node
     # For example: 
@@ -329,6 +346,7 @@ class Rule:
         merge_rhs_attrs = {}
         for p_origin in p_origins:
             new_rhs_attrs = self._dict_difference(self.rhs.nodes[rhs_node], self.p.nodes[p_origin])
+            new_rhs_attrs = self.format_value_attribute(new_rhs_attrs)
             merge_rhs_attrs = self.merge_policy(merge_rhs_attrs, new_rhs_attrs)
         return merge_rhs_attrs
 
@@ -353,6 +371,7 @@ class Rule:
                         self.rhs.get_edge_data(*rhs_edge),
                         self.p.get_edge_data(s_origin, t_origin)
                     )
+                    new_rhs_attrs = self.format_value_attribute(new_rhs_attrs)
                     merge_rhs_attrs = self.merge_policy(merge_rhs_attrs, new_rhs_attrs)
         return merge_rhs_attrs
 
@@ -508,7 +527,7 @@ class Rule:
             if node_rhs in self.nodes_to_add():
                 rhs_attrs = self.rhs.nodes(data=True)[node_rhs]
                 if len(rhs_attrs) != 0:
-                    attrs_to_add[node_rhs] = rhs_attrs
+                    attrs_to_add[node_rhs] = self.format_value_attribute(rhs_attrs)
             else:
                 p_origins = self._rev_p_rhs.get(node_rhs, set())
                 merged_p_attrs = self._merge_node_attrs(node_rhs, p_origins)
@@ -528,7 +547,7 @@ class Rule:
             if s in self.nodes_to_add() or t in self.nodes_to_add():
                 rhs_attrs = self.rhs.get_edge_data(s, t)
                 if len(rhs_attrs) != 0:
-                    attrs_to_add[(s, t)] = rhs_attrs
+                    attrs_to_add[(s, t)] = self.format_value_attribute(rhs_attrs)
             else:
                 s_origins, t_origins = self._rev_p_rhs.get(s, set()), self._rev_p_rhs.get(t, set())
                 merged_p_attrs = self._merge_edge_attrs((s, t), s_origins, t_origins)

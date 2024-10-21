@@ -126,7 +126,7 @@ class graphRewriteTransformer(Transformer):
                 # will be added to the condition function
                 constraints[str(attr_name)] = (type, value) 
             else:
-                attr_names[str(attr_name)] = value
+                attr_names[str(attr_name)] = (type, value)
 
         return (attr_names, constraints)
 
