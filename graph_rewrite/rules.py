@@ -91,13 +91,8 @@ class Rule:
     - P - defines what parts to preserve (and also defines clones).
     - RHS - defines what parts to add (and also defines merges).
     """
-    def __init__(self, match: Match, single_nodes_lhs: DiGraph, collections_lhs: DiGraph = None, 
-                 p: DiGraph = None, rhs: DiGraph = None,
-                 merge_policy = MergePolicy.choose_last):
-        self.match = match
-        self.single_nodes_lhs = single_nodes_lhs
-        self.collections_lhs = collections_lhs
-        self.lhs = self._create_lhs_graph()
+    def __init__(self, lhs: DiGraph, p: DiGraph = None, rhs: DiGraph = None, merge_policy = MergePolicy.choose_last):
+        self.lhs = lhs
         self.p = p if p else self.lhs_p_copy(self.lhs)
         self.rhs = rhs if rhs else self.p.copy()
         self.merge_policy = merge_policy
@@ -112,24 +107,6 @@ class Rule:
         self._validate_rule()
 
     # Utils
-    def _create_lhs_graph(self):
-        g = DiGraph()
-        for node in self.match.get_pattern_nodes():
-            g.add_node(node)
-            if self.match.is_single(node):
-                node_attrs = self.single_nodes_lhs.nodes[node]
-            else:
-                node_attrs = self.collections_lhs.nodes[node]
-            g.nodes[node].update(node_attrs)
-        for src, dst in self.match.get_pattern_edges():
-            g.add_edge(src, dst)
-            if self.match.is_single(src) and self.match.is_single(dst):
-                edge_attrs = self.single_nodes_lhs.edges[src, dst]
-            else:
-                edge_attrs = self.collections_lhs.edges[src, dst]
-            g.edges[src, dst].update(edge_attrs)
-        return g
-
     def _create_p_lhs_hom(self):
         """Construct the homomorphism from P to LHS based on the rule.
         Handles cloned nodes.
@@ -242,15 +219,12 @@ class Rule:
 
     # TODO: need to add a check that there are no contradictions caused by mapping the same input node to a single pattern node and a collection pattern node
     # For example: 
-    # 1. Removing an node/edge as the single pattern node, but keeping it as the collection pattern node, or vice versa
-    # 2. Removing an attribute from a node/edge in the single pattern node, but keeping it in the collection pattern node, or vice versa
+    # 1. Removing an attribute from a node/edge in the single pattern node, but keeping it in the collection pattern node, or vice versa
     def _validate_lhs_p(self):
         """Validates the LHS->P homomorphism, and raises appropriate exceptions if it's invalid.
         """
         # We ensure that the attributes of the nodes and edges in P are a subset of the attributes of the corresponding nodes and edges in LHS.
         # This is done to ensure that we don't add attributes to nodes or edges in P that are not present in the corresponding LHS nodes or edges.
-        
-        
         lhs_nodes_attr_dict = {pattern_node: self.lhs.nodes[pattern_node] for pattern_node in self.lhs.nodes()}
 
         for lhs_pattern_node in lhs_nodes_attr_dict:
@@ -387,8 +361,35 @@ class Rule:
         # Find all LHS nodes which are mapped by more than one node in P (in the P->LHS Hom.)
         return {lhs_node: self._rev_p_lhs[lhs_node] for lhs_node in self.lhs.nodes() \
                             if len(self._rev_p_lhs.get(lhs_node, set())) > 1}
-    
-    # TODO: Ensure there is no double deletion of nodes/edges or attributes because of mapping the same input node to a single pattern node and a collection pattern node
+        
+    def nodes_to_preserve(self) -> set[NodeName]:
+        """Find all LHS nodes that should be preserved.
+
+        Returns:
+            set[NodeName]: Nodes in LHS which should be preserved.
+        """
+        # Find all LHS nodes which are mapped by exactly one node in P (in the P->LHS Hom.)
+        return {lhs_node for lhs_node in self.lhs.nodes() if len(self._rev_p_lhs.get(lhs_node, set())) == 1}
+
+    def edges_to_preserve(self) -> set[EdgeName]:
+        """Find all P edges that should be preserved.
+
+        Returns:
+            set[EdgeName]: Edges in P which should be preserved.
+        """
+        edges_to_preserve = set()
+        candidate_edges = list(self.lhs.edges())
+        for s, t in candidate_edges:
+            # If one of the edge endpoints was removed, the edge was removed automatically so we skip it here
+            if s not in self.nodes_to_remove() and t not in self.nodes_to_remove():
+                s_copies, t_copies = self._rev_p_lhs.get(s, set()), self._rev_p_lhs.get(t, set())
+                for s_copy in s_copies:
+                    for t_copy in t_copies:
+                        # For each "clone of edge (s,t)" that should be in P, remove it
+                        if (s_copy, t_copy) in self.p.edges() and not '*' in s_copy and not '*' in t_copy:
+                            edges_to_preserve.add((s_copy, t_copy))
+        return edges_to_preserve
+
     def nodes_to_remove(self) -> set[NodeName]:
         """Find all LHS nodes that should be removed.
 
