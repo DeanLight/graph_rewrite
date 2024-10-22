@@ -254,7 +254,9 @@ class graphRewriteTransformer(Transformer):
         G.add_edges_from([(node1, node2, combined_attributes[node1 + "->" + node2]) for (node1,node2) in new_edges])
         
         #sent as a module output and replaces condition.
-        return (G, copy.deepcopy(self.constraints)) 
+        constraints = copy.deepcopy(self.constraints)
+        self.constraints = {}
+        return (G, constraints) 
 
     def lhs(self, args):
         return [arg for arg in args if arg is not None]
