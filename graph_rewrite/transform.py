@@ -29,8 +29,13 @@ _exception_msgs = {
     "not_enough_to_merge": lambda: f"Tried to merge less than one nodes.",
     "node_removal_conflict": lambda removed_node, preserved_node, input_node: f"Input node {input_node} was removed by pattern node {removed_node}, which conflicts with preserved pattern node {preserved_node}",
     "edge_removal_conflict": lambda removed_edge_src, removed_edge_dst, preserved_edge_src, preserved_edge_dst, input_src, input_dst: \
-        f"Input edge ({input_src}, {input_dst}) was removed by pattern edge ({removed_edge_src}, {removed_edge_dst}), which conflicts with preserved pattern edge ({preserved_edge_src}, {preserved_edge_dst})"
-
+        f"Input edge ({input_src}, {input_dst}) was removed by pattern edge ({removed_edge_src}, {removed_edge_dst}), which conflicts with preserved pattern edge ({preserved_edge_src}, {preserved_edge_dst})",
+    "node_attrs_removal_conflict": lambda removed_node, preserved_node, input_node, attrs: \
+        f"Attributes {attrs} in input node {input_node} should be removed by pattern node {removed_node}, which conflicts with preserved pattern node {preserved_node}'s attributes",
+    "edge_attrs_removal_conflict": lambda removed_edge, preserved_edge, input_edge, attrs: \
+         f"Attributes {attrs} in input node {input_edge} should be removed by pattern edge {preserved_edge}, which conflicts with preserved pattern edge {removed_edge}'s attributes",
+    "node_attrs_addition_conflict": lambda first_rhs_node, second_rhs_node, input_node, attr: f"Attribute {attr} in input_node {input_node} value conflicts between pattern nodes {first_rhs_node} and {second_rhs_node}",
+    "edge_attrs_addition_conflict": lambda first_rhs_edge, second_rhs_edge, input_edge, attr: f"Attribute {attr} in input_node {input_edge} value conflicts between pattern nodes {first_rhs_edge} and {second_rhs_edge}"
 }
 
 # %% ../nbs/06_transform.ipynb 8
@@ -466,26 +471,52 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
     for src_name, dst_name in edges_to_remove:
         for src_node, dst_node in product(lhs_input_map[src_name], lhs_input_map[dst_name]):
             # Since we support the collections feature, the mapping has all possible assignements for each node, and so we need to ensure that this edge actually exists
-            if (src_node, dst_node) in input_graph.edges():
-                if (src_node, dst_node) in input_edges_to_preserve.keys():
-                    raise GraphRewriteException(_exception_msgs["edge_removal_conflict"](src_name, dst_name, input_edges_to_preserve[(src_node, dst_node)][0], input_edges_to_preserve[(src_node, dst_node)][1], 
+            if (src_node, dst_node) in input_edges_to_preserve.keys():
+                raise GraphRewriteException(_exception_msgs["edge_removal_conflict"](src_name, dst_name, input_edges_to_preserve[(src_node, dst_node)][0], input_edges_to_preserve[(src_node, dst_node)][1], 
                                                                                     src_node, dst_node))
-                _log(f"Remove edge {src_node, dst_node}", is_log)
-                _remove_edge(input_graph, (src_node, dst_node))
+            _log(f"Remove edge {src_node, dst_node}", is_log)
+            _remove_edge(input_graph, (src_node, dst_node))
 
-    # Remove node attributes
-    for node_name, attrs_to_remove in rule.node_attrs_to_remove().items():
-        for input_node in lhs_input_map[node_name]:
-            _log(f"Remove attrs {attrs_to_remove} from node {input_node}", is_log)
-            _remove_node_attrs(input_graph, input_node, attrs_to_remove)            
+    # Remove node attributes    
+        
+    # Get input nodes first to avoid double removals of attributes
+    input_node_attrs_to_remove = defaultdict(set)
+    input_nodes_to_nodes = {}
+    for node, attrs in rule.node_attrs_to_remove().items():
+        for input_node in lhs_input_map[node]:
+            input_node_attrs_to_remove[input_node].update(attrs)
+            input_nodes_to_nodes[input_node] = node
+    
+    # Check for conflicts with attributes that should be preserved   
+    for node, attrs in rule.node_attrs_to_preserve().items():
+        for input_node in lhs_input_map[node]:
+            if input_node in input_node_attrs_to_remove and attrs & input_node_attrs_to_remove[input_node]:
+                raise GraphRewriteException(_exception_msgs["node_attrs_removal_conflict"](input_nodes_to_nodes[input_node], node, input_node, attrs & input_node_attrs_to_remove[input_node]))
+            
+    for input_node, attrs_to_remove in input_node_attrs_to_remove.items():
+        _log(f"Remove attrs {attrs_to_remove} from node {input_node}", is_log)
+        _remove_node_attrs(input_graph, input_node, attrs_to_remove)               
     
     # Remove edge attributes
-    for edge_name, attrs_to_remove in rule.edge_attrs_to_remove().items():
-        for src_node, dst_node in product(lhs_input_map[edge_name[0]], lhs_input_map[edge_name[1]]):
-            # Since we support the collections feature, the mapping has all possible assignements for each node, and so we need to ensure that this edge actually exists
-            if (src_node, dst_node) in input_graph.edges():
-                _log(f"Remove attrs {attrs_to_remove} from edge {src_node, dst_node}", is_log)
-                _remove_edge_attrs(input_graph, (src_node, dst_node), attrs_to_remove)
+    # Get input edges first to avoid double removals of attributes
+    input_edges_attrs_to_remove = defaultdict(set)
+    input_edges_to_edges = {}
+    for edge_name, attrs in rule.edge_attrs_to_remove().items():
+        # Iterate over all input edges using the Cartesian product of input nodes for src and dst
+        for input_edge in product(lhs_input_map[edge_name[0]], lhs_input_map[edge_name[1]]):
+            input_edges_attrs_to_remove[input_edge].update(attrs)
+            input_edges_to_edges[input_edge] = edge_name
+    
+    # Check for conflicts with attributes that should be preserved 
+    for edge_name, attrs in rule.edge_attrs_to_preserve().items():
+        # Iterate over all input edges using the Cartesian product of input nodes for src and dst
+        for input_edge in product(lhs_input_map[edge_name[0]], lhs_input_map[edge_name[1]]):
+            if input_edge in input_edges_attrs_to_remove and attrs & input_edges_attrs_to_remove[input_edge]:
+                raise GraphRewriteException(_exception_msgs["edge_attrs_removal_conflict"](input_edges_to_edges[input_edge], edge_name, input_edge, attrs & input_edges_attrs_to_remove[input_edge]))
+    
+    for input_edge, attrs_to_remove in input_edges_attrs_to_remove.items():        
+        _log(f"Remove attrs {attrs_to_remove} from edge {input_edge[0], input_edge[1]}", is_log)
+        _remove_edge_attrs(input_graph, (input_edge[0], input_edge[1]), attrs_to_remove)
   
     return p_input_map
 
@@ -541,19 +572,49 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
             _log(f"Add edge {src_node, dst_node}", is_log)
             _add_edge(input_graph, (src_node, dst_node))
 
-    # Add node attrs.
-    for rhs_node, attrs_to_add in rule.node_attrs_to_add().items(): 
-        for node in rhs_input_map[rhs_node]:
-            _log(f"Added attrs {attrs_to_add} to node {node}", is_log)
-            _add_node_attrs(input_graph, node, attrs_to_add)
+    # Add node attrs.   
+    # Get input nodes first to avoid double removals of attributes and check for conflicts
+    input_node_attrs_to_add = defaultdict(dict)
+    input_node_to_rhs_node = {}
+    for rhs_node, attrs in rule.node_attrs_to_add().items():
+        for input_node in rhs_input_map[rhs_node]:
+            for attr, val in attrs.items():
+                if attr in input_node_attrs_to_add[input_node]:
+                    original_val = input_node_attrs_to_add[input_node][attr]
+                    original_rhs_node = input_node_to_rhs_node[input_node]
+                    if original_val != val:
+                        raise GraphRewriteException(_exception_msgs["node_attrs_addition_conflict"](original_rhs_node, rhs_node, input_node, attr))
+                else:
+                    input_node_attrs_to_add[input_node][attr] = val
+                    input_node_to_rhs_node[input_node] = rhs_node
+           
+    for input_node, attrs_to_add in input_node_attrs_to_add.items(): 
+        _log(f"Added attrs {attrs_to_add} to node {input_node}", is_log)
+        _add_node_attrs(input_graph, input_node, attrs_to_add)
 
     # Add edge attrs.
-    for (rhs_src, rhs_target), attrs_to_add in rule.edge_attrs_to_add().items(): 
-        for src_node, dst_node in product(rhs_input_map[rhs_src], rhs_input_map[rhs_target]):
-            # Since we support the collections feature, the mapping has all possible assignements for each node, and so we need to ensure that this edge actually exists
-            if (src_node, dst_node) in input_graph.edges():
-                _log(f"Added attrs {attrs_to_add} to edge {src_node, dst_node}", is_log)
-                _add_edge_attrs(input_graph, (src_node, dst_node), attrs_to_add)
+    
+    input_edge_attrs_to_add = defaultdict(dict)
+    input_edge_to_rhs_edge = {}
+
+    for rhs_edge, attrs in rule.edge_attrs_to_add().items():
+        for input_edge in product(rhs_input_map[rhs_edge[0]], rhs_input_map[rhs_edge[1]]):
+            for attr, val in attrs.items():
+                if attr in input_edge_attrs_to_add[input_edge]:
+                    original_val = input_edge_attrs_to_add[input_edge][attr]
+                    original_rhs_edge = input_edge_to_rhs_edge[input_edge]
+                    if original_val != val:
+                        # Raise exception if conflicting attribute values for the same edge
+                        raise GraphRewriteException(_exception_msgs["edge_attrs_addition_conflict"](original_rhs_edge, rhs_edge, input_edge, attr))
+                else:
+                    # Add the attribute and track the original rhs_edge
+                    input_edge_attrs_to_add[input_edge][attr] = val
+                    input_edge_to_rhs_edge[input_edge] = rhs_edge
+
+    # After resolving attributes, log and apply them to the graph
+    for input_edge, attrs_to_add in input_edge_attrs_to_add.items():
+        _log(f"Added attrs {attrs_to_add} to edge {input_edge}", is_log)
+        _add_edge_attrs(input_graph, input_edge, attrs_to_add)
 
 # %% ../nbs/06_transform.ipynb 26
 def _copy_graph(graph: DiGraph) -> DiGraph:
@@ -670,7 +731,7 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
     if is_recursive:
         while True:
             try:
-                next_match = next(find_matches(input_graph, lhs_single_nodes_graph, lhs_collections_graph, condition))
+                next_match = next(find_matches(input_graph, lhs_single_nodes_graph, lhs_collections_graph, condition, warn_on_collisions=is_log))
                 if display_matches:
                     draw_match(input_graph, next_match)
                 yield next_match
@@ -686,7 +747,7 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
         copy_input_graph = _copy_graph(input_graph)
 
         # Find matches lazily and transform
-        for match in find_matches(copy_input_graph, lhs_single_nodes_graph, lhs_collections_graph, condition):
+        for match in find_matches(copy_input_graph, lhs_single_nodes_graph, lhs_collections_graph, condition, warn_on_collisions=is_log):
             if display_matches:
                 draw_match(input_graph, match)
             # the match object points to the copy graph, so we need to move it to the original graph for imperative changes

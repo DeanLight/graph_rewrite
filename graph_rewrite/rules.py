@@ -217,9 +217,6 @@ class Rule:
         '''
         return {key:d[key][1] for key in d}
 
-    # TODO: need to add a check that there are no contradictions caused by mapping the same input node to a single pattern node and a collection pattern node
-    # For example: 
-    # 1. Removing an attribute from a node/edge in the single pattern node, but keeping it in the collection pattern node, or vice versa
     def _validate_lhs_p(self):
         """Validates the LHS->P homomorphism, and raises appropriate exceptions if it's invalid.
         """
@@ -254,10 +251,6 @@ class Rule:
             if (self._p_to_lhs[p_s], self._p_to_lhs[p_t]) not in self.lhs.edges():
                 raise GraphRewriteException(_exception_msgs["p_edge_not_in_lhs"](p_s, p_t))
 
-    # TODO: need to add a check that there are no contradictions caused by mapping the same input node to a single pattern node and a collection pattern node
-    # For example:
-    # 1. Adding an attribute to a node in the single pattern node, and also adding it in the collection pattern node
-    # 2. Assigning different values to the same attribute in the single pattern node and the collection pattern node
     def _validate_rhs_p(self):
         """Validates the RHS->P homomorphism, and raises appropriate exceptions if it's invalid.
         """
@@ -389,6 +382,24 @@ class Rule:
                         if (s_copy, t_copy) in self.p.edges() and not '*' in s_copy and not '*' in t_copy:
                             edges_to_preserve.add((s_copy, t_copy))
         return edges_to_preserve
+    
+    def node_attrs_to_preserve(self) -> dict[NodeName, set]:
+        """Find all p node attributes that should be preserved.
+
+        Returns:
+            dict[NodeName, set]: Nodes in p and corresponding attribute names which should be preserved.
+        """
+        # All attrs in p are preserved except for cloned nodes
+        return {node: set(data.keys()) for node, data in self.p.nodes(data=True) if '*' not in node}
+    
+    def edge_attrs_to_preserve(self) -> dict[EdgeName, set]:
+        """Find all P edge attributes that should be preserved.
+
+        Returns:
+            dict[EdgeName], set]: Edges in p and corresponding attribute names which should be preserved.
+        """
+        # All attrs in p are preserved except for cloned nodes
+        return {(u,v): set(data.keys()) for u, v, data in self.p.edges(data=True) if '*' not in u and '*' not in v}
 
     def nodes_to_remove(self) -> set[NodeName]:
         """Find all LHS nodes that should be removed.
@@ -514,7 +525,6 @@ class Rule:
                     edges_to_add.add((s,t))
         return edges_to_add
 
-    # TODO: Ensure there is no double addition of attributes because of mapping the same input node to a single pattern node and a collection pattern node
     def node_attrs_to_add(self) -> dict[NodeName, dict]:
         """For each RHS node, find all attributes (and values) of its corresponding P node(s)
         which should be added to the RHS node.
