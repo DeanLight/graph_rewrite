@@ -12,6 +12,9 @@ from lark import UnexpectedCharacters, UnexpectedToken
 from .match_class import Match
 from .core import GraphRewriteException
 from .core import _create_graph,  _graphs_equal, draw
+from collections import defaultdict
+from .match_class import _convert_to_edge_name
+from typing import Tuple, Union
 
 # %% ../nbs/01_lhs_parsing.ipynb 9
 lhs_parser = Lark(r"""
@@ -45,9 +48,11 @@ lhs_parser = Lark(r"""
     | ANONYMUS [attributes]
 
     pattern: vertex (connection vertex)*
-    patterns: pattern (";" pattern)*
+    patterns: pattern ("," pattern)* 
+    lhs: patterns [";" patterns]
 
-    """, parser="lalr", start='patterns' , debug=True)
+    """, parser="lalr", start='lhs', debug=True)
+
 
 # multi_connection: "-" NATURAL_NUMBER "+" [attributes] "->"  - setting for the "-num+->" feature
 
@@ -103,8 +108,11 @@ class graphRewriteTransformer(Transformer):
             attr_name = args[0]
             type, value = None, None
         else:
-            attr_name, type, value = args
-        # pass a tuple of attr_name, required type, required value.
+            attr_name, type, value = args       
+        
+        if type is not None and type not in ["int", "str", "bool", "float"]:
+            raise GraphRewriteException(f"Type '{type}' is not one of the types supported by the LHS parser: int, str, bool, float or None. If another type is needed, please use the condition function.")
+            
         return (attr_name, type, value)
     
     def attributes(self, attributes): # a list of triples 
@@ -114,11 +122,11 @@ class graphRewriteTransformer(Transformer):
             # will be added to the graph itself
             attr_name, type, value = attribute
             if self.component == "LHS":
-                attr_names[str(attr_name)] = None 
+                attr_names[str(attr_name)] = (None, None)
                 # will be added to the condition function
                 constraints[str(attr_name)] = (type, value) 
             else:
-                attr_names[str(attr_name)] = value
+                attr_names[str(attr_name)] = (type, value)
 
         return (attr_names, constraints)
 
@@ -142,7 +150,7 @@ class graphRewriteTransformer(Transformer):
 
     def ANONYMUS(self, _): #
         # return a dedicated name for anonymus (string), and an empty indices list.
-        x = "_" + str(self.cnt)
+        x = "_anonymous_node_" + str(self.cnt)
         self.cnt += 1
         return (x, [])
 
@@ -152,7 +160,8 @@ class graphRewriteTransformer(Transformer):
         return (main_name_tup[0], list(numbers))
     
     def NAMED_VERTEX(self, name):
-        # return the main name of the vertex, and an empty indices list.
+        if name.startswith("_anonymous_node_"):
+            raise GraphRewriteException("_anonymous_node_ prefix cannot be used for a vertex name in LHS")
         return (str(name), [])
 
     def vertex(self, args): # (vertex_tuple: tuple, attributes: list)
@@ -245,60 +254,68 @@ class graphRewriteTransformer(Transformer):
         G.add_edges_from([(node1, node2, combined_attributes[node1 + "->" + node2]) for (node1,node2) in new_edges])
         
         #sent as a module output and replaces condition.
-        return (G, copy.deepcopy(self.constraints)) 
+        constraints = copy.deepcopy(self.constraints)
+        self.constraints = {}
+        return (G, constraints) 
+
+    def lhs(self, args):
+        return [arg for arg in args if arg is not None]
+
 
 # %% ../nbs/01_lhs_parsing.ipynb 14
-def lhs_to_graph(lhs: str, condition = None,debug=False):
-    """Given an LHS pattern and a condition function, return the directed graph represented by the pattern, 
-    along with an updated condition function that combines the original constraints and the new value and type constraints
-    deriving from the pattern.
+def lhs_to_graph(lhs: str, debug: bool = False) -> Tuple[nx.DiGraph, nx.DiGraph]:
+    """
+    Converts a LHS string to a networkx graph and extracts constraints.
 
     Args:
-        lhs (string): A string in lhs format 
-        condition (lambda: Match -> bool): A function supplied by the user specifying additional 
-                                           constraints on the graph components.
+    - lhs: str - a string representing the LHS of a rule.
+    - debug: bool - if True, returns the parse tree and the collections tree, instead of the graphs.
 
     Returns:
-        DiGraph, lambda: Match->bool: a networkx graph that is the graph represented by the pattern, 
-                                      and an extended condition function as mentioned above.
+    - Tuple[nx.DiGraph, nx.DiGraph] - a tuple of two networkx graphs: the single nodes graph and the collections graph.
     """
     try:
-        tree = lhs_parser.parse(lhs)
+        parse_tree = lhs_parser.parse(lhs)
         if debug:
-            return tree, None
-        final_graph, constraints = graphRewriteTransformer(component="LHS").transform(tree)
-        # constraints is a dictionary: vertex/edge -> {attr_name: (value, type), ...}
+            return parse_tree, None
 
-        # add the final constraints to the "condition" function
-        def type_condition(match: Match):
-            flag = True
-            for graph_obj in constraints.keys():
-                obj_constraints = constraints[graph_obj]
-                for attr_name in obj_constraints.keys():
-                    required_type_str, required_value = obj_constraints[attr_name]
+        transformer = graphRewriteTransformer(component="LHS")
+        patterns_list = transformer.transform(parse_tree)  # List of (graph, constraints)
 
-                    # check value constraint
-                    if required_value != None:
-                        if not hasattr(required_value, '__eq__') or (not required_value == match[graph_obj][attr_name]):
-                            flag = False
-                    
-                    # check type constraint only of value was not checked
-                    str_to_type = {"str":str, "float":float, "int":int, "bool":bool}
-                    if not required_type_str == None:
-                        required_type = str_to_type[required_type_str]
-                    else:
-                        required_type = None
-                    
-                    if required_type_str != None and not isinstance(match[graph_obj][attr_name], required_type):
-                        flag = False
-    
-            # True <=> the match satisfies all the constraints.
-            if condition == None:
-                return flag
-            else:
-                return flag and condition(match) 
-                
-        return final_graph, type_condition
+        if len(patterns_list) == 1:
+            single_nodes_graph, single_nodes_constraints = patterns_list[0]
+            collections_graph = nx.DiGraph()
+            collections_constraints = {}
+        elif len(patterns_list) == 2:
+            single_nodes_graph, single_nodes_constraints = patterns_list[0]
+            collections_graph, collections_constraints = patterns_list[1]
+        else:
+            raise GraphRewriteException("Unexpected number of pattern sets in LHS.")
+
+        _add_constraints_to_graph(single_nodes_graph, single_nodes_constraints)
+        _add_constraints_to_graph(collections_graph, collections_constraints)
+
+        return single_nodes_graph, collections_graph
+
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
         raise GraphRewriteException('Unable to convert LHS: {}'.format(e))
+
+
+def _add_constraints_to_graph(graph: nx.DiGraph, constraints: dict):
+    """
+    Adds constraints to a graph, by going over the constraints dict and adding them to the graph, 
+    such that each node or edge has the a dictionary of constraints - attr_name -> (attr_type_str, attr_value).
+
+    Args:
+    - graph: nx.DiGraph - the graph to add constraints to.
+    - constraints: dict - the constraints to add to the graph.
+    """
+
+    for graph_obj, attr_constraints in constraints.items():
+        for attr_name in attr_constraints.keys():
+            if graph_obj in graph.nodes:
+                graph.nodes[graph_obj][attr_name] = attr_constraints[attr_name]
+            else: 
+                node1, node2 = graph_obj.split("->")
+                graph.edges[node1, node2][attr_name] = attr_constraints[attr_name]
 

@@ -16,6 +16,9 @@ from .matcher import find_matches, FilterFunc
 from .p_rhs_parse import RenderFunc, p_to_graph, rhs_to_graph
 from .rules import Rule, MergePolicy
 
+from itertools import product
+from collections import defaultdict
+
 # %% ../nbs/06_transform.ipynb 7
 _exception_msgs = {
     "no_such_node": lambda node: f"Node {node} does not exist in the input graph.",
@@ -23,10 +26,43 @@ _exception_msgs = {
     "no_such_attr_in_node": lambda attr, node: f"Attribute {attr} does not exist in input graph's node {node}.",
     "no_such_attr_in_edge": lambda attr, edge: f"Attribute {attr} does not exist in input graph's edge {edge}.",
     "edge_exists": lambda edge: f"Edge {edge} already exists in the input graph.",
-    "not_enough_to_merge": lambda: f"Tried to merge less than one nodes."
+    "not_enough_to_merge": lambda: f"Tried to merge less than one nodes.",
+    "node_removal_conflict": lambda removed_node, preserved_node, input_node: f"Input node {input_node} was removed by pattern node {removed_node}, which conflicts with preserved pattern node {preserved_node}",
+    "edge_removal_conflict": lambda removed_edge_src, removed_edge_dst, preserved_edge_src, preserved_edge_dst, input_src, input_dst: \
+        f"Input edge ({input_src}, {input_dst}) was removed by pattern edge ({removed_edge_src}, {removed_edge_dst}), which conflicts with preserved pattern edge ({preserved_edge_src}, {preserved_edge_dst})",
+    "node_attrs_removal_conflict": lambda removed_node, preserved_node, input_node, attrs: \
+        f"Attributes {attrs} in input node {input_node} should be removed by pattern node {removed_node}, which conflicts with preserved pattern node {preserved_node}'s attributes",
+    "edge_attrs_removal_conflict": lambda removed_edge, preserved_edge, input_edge, attrs: \
+         f"Attributes {attrs} in input node {input_edge} should be removed by pattern edge {preserved_edge}, which conflicts with preserved pattern edge {removed_edge}'s attributes",
+    "node_attrs_addition_conflict": lambda first_rhs_node, second_rhs_node, input_node, attr: f"Attribute {attr} in input_node {input_node} value conflicts between pattern nodes {first_rhs_node} and {second_rhs_node}",
+    "edge_attrs_addition_conflict": lambda first_rhs_edge, second_rhs_edge, input_edge, attr: f"Attribute {attr} in input_node {input_edge} value conflicts between pattern nodes {first_rhs_edge} and {second_rhs_edge}"
 }
 
 # %% ../nbs/06_transform.ipynb 8
+def _create_lhs_graph(single_nodes_lhs: DiGraph, collections_lhs: DiGraph):
+    def should_exclude(node):
+        return str(node).startswith("_anonymous_node")
+
+    g = DiGraph()
+    for node, data in collections_lhs.nodes(data=True):
+        if should_exclude(node):
+            continue
+        g.add_node(node, **data)
+    for node, data in single_nodes_lhs.nodes(data=True):
+        if should_exclude(node):
+            continue
+        g.add_node(node, **data)  
+    for u, v, data in collections_lhs.edges(data=True):
+        if should_exclude(u) or should_exclude(v):
+            continue
+        g.add_edge(u, v, **data)
+    for u, v, data in single_nodes_lhs.edges(data=True):
+        if should_exclude(u) or should_exclude(v):
+            continue
+        g.add_edge(u, v, **data)
+    return g
+
+# %% ../nbs/06_transform.ipynb 9
 def _generate_new_node_name(graph: DiGraph, base_name: NodeName) -> NodeName:
     """Generate a name for a new node, which is unique in the graph to which the node is added,
     based on an initial name suggestion.
@@ -48,7 +84,7 @@ def _generate_new_node_name(graph: DiGraph, base_name: NodeName) -> NodeName:
         new_name = f"{base_name}_{i}"
     return new_name
 
-# %% ../nbs/06_transform.ipynb 9
+# %% ../nbs/06_transform.ipynb 10
 def _clone_node(graph: DiGraph, node_to_clone: NodeName) -> NodeName:
     """Clones a node in the graph. That is, create a new node, whose name denotes its connection to the original node,
     whose edges are copies of the edges connected to the original node, and whose attributes are duplicated
@@ -87,7 +123,7 @@ def _clone_node(graph: DiGraph, node_to_clone: NodeName) -> NodeName:
  
     return clone_name
 
-# %% ../nbs/06_transform.ipynb 10
+# %% ../nbs/06_transform.ipynb 11
 def _remove_node(graph: DiGraph, node_to_remove: NodeName):
     """Remove a node from the graph.
 
@@ -99,10 +135,11 @@ def _remove_node(graph: DiGraph, node_to_remove: NodeName):
         GraphRewriteException: If the removed node doesn't exist in the graph
     """
     if node_to_remove not in graph.nodes():
-        raise GraphRewriteException(_exception_msgs["no_such_node"](node_to_remove))
+        return
+        #raise GraphRewriteException(_exception_msgs["no_such_node"](node_to_remove))
     graph.remove_node(node_to_remove)
 
-# %% ../nbs/06_transform.ipynb 11
+# %% ../nbs/06_transform.ipynb 12
 def _remove_edge(graph: DiGraph, edge_to_remove: EdgeName):
     """Remove an edge from the graph.
 
@@ -117,7 +154,7 @@ def _remove_edge(graph: DiGraph, edge_to_remove: EdgeName):
         raise GraphRewriteException(_exception_msgs["no_such_edge"](edge_to_remove))
     graph.remove_edge(*edge_to_remove)
 
-# %% ../nbs/06_transform.ipynb 12
+# %% ../nbs/06_transform.ipynb 13
 def _remove_node_attrs(graph: DiGraph, node: NodeName, attrs_to_remove: set):
     """Remove a subset of some node's attributes from the node.
 
@@ -136,7 +173,7 @@ def _remove_node_attrs(graph: DiGraph, node: NodeName, attrs_to_remove: set):
             raise GraphRewriteException(_exception_msgs["no_such_attr_in_node"](attr, node))
         del graph.nodes[node][attr]
 
-# %% ../nbs/06_transform.ipynb 13
+# %% ../nbs/06_transform.ipynb 14
 def _remove_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_remove: set):
     """Remove a subset of some edge's attributes from the node.
 
@@ -156,7 +193,7 @@ def _remove_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_remove: set):
             raise GraphRewriteException(_exception_msgs["no_such_attr_in_edge"](attr, edge))
         del graph.edges[edge][attr]
 
-# %% ../nbs/06_transform.ipynb 14
+# %% ../nbs/06_transform.ipynb 15
 def _setup_merged_node(graph: DiGraph, nodes_to_merge: set[NodeName], merge_policy: MergePolicy):
     """A helper function for node merging. It calculates all the parameters needed for creating the merged node,
     such as its name, its attributes, the connected edges and their attributes, etc., and returns them all.
@@ -176,7 +213,7 @@ def _setup_merged_node(graph: DiGraph, nodes_to_merge: set[NodeName], merge_poli
         - The attrs of the new edges to the merged node
         - The attrs of the new edges from the merged node
         - A boolean value for whether the new merged node has a self loop (a special case)
-        - The attributes of the selp loop, in case such edge exists
+        - The attributes of the self loop, in case such edge exists
     """
     merged_node_name = _generate_new_node_name(graph, "&".join(nodes_to_merge))
     
@@ -223,7 +260,7 @@ def _setup_merged_node(graph: DiGraph, nodes_to_merge: set[NodeName], merge_poli
     return merged_node_name, merged_node_attrs, merged_src_nodes, merged_target_nodes,\
             merged_src_attrs, merged_target_attrs, self_loop, self_loop_attrs
 
-# %% ../nbs/06_transform.ipynb 15
+# %% ../nbs/06_transform.ipynb 16
 def _merge_nodes(graph: DiGraph, nodes_to_merge: set[NodeName], merge_policy: MergePolicy) -> NodeName:
     """Merge a set of nodes in the graph. That is, remove all these nodes and replace them with a new node,
     whose attributes merge the attributes of the original nodes, whose connected edges merge the edges connected to
@@ -265,7 +302,7 @@ def _merge_nodes(graph: DiGraph, nodes_to_merge: set[NodeName], merge_policy: Me
         if (merged_node_name, target_node) not in graph.edges():
             graph.add_edge(merged_node_name, target_node)
     
-    # Add edge attributes (other than selp loop)
+    # Add edge attributes (other than self loop)
     for src_node, attrs in merged_src_attrs.items():
         if src_node not in nodes_to_merge:
             graph.update(edges=[(src_node, merged_node_name, attrs)])
@@ -275,7 +312,7 @@ def _merge_nodes(graph: DiGraph, nodes_to_merge: set[NodeName], merge_policy: Me
 
     return merged_node_name
 
-# %% ../nbs/06_transform.ipynb 16
+# %% ../nbs/06_transform.ipynb 17
 def _add_node(graph: DiGraph, node_to_add: NodeName) -> NodeName:
     """Add a new node to the graph.
 
@@ -291,7 +328,7 @@ def _add_node(graph: DiGraph, node_to_add: NodeName) -> NodeName:
     graph.add_node(new_name)
     return new_name
 
-# %% ../nbs/06_transform.ipynb 17
+# %% ../nbs/06_transform.ipynb 18
 def _add_edge(graph: DiGraph, edge_to_add: EdgeName):
     """Add an edge to the graph.
 
@@ -312,7 +349,7 @@ def _add_edge(graph: DiGraph, edge_to_add: EdgeName):
     else:
         graph.add_edge(src, target)
 
-# %% ../nbs/06_transform.ipynb 18
+# %% ../nbs/06_transform.ipynb 19
 def _add_node_attrs(graph: DiGraph, node: NodeName, attrs_to_add: dict):
     """Add attributes to a node in the graph.
 
@@ -329,7 +366,7 @@ def _add_node_attrs(graph: DiGraph, node: NodeName, attrs_to_add: dict):
     for attr, val in attrs_to_add.items():
         graph.nodes[node][attr] = val
 
-# %% ../nbs/06_transform.ipynb 19
+# %% ../nbs/06_transform.ipynb 20
 def _add_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_add: dict):
     """Add attributes to an edge in the graph.
 
@@ -346,7 +383,7 @@ def _add_edge_attrs(graph: DiGraph, edge: EdgeName, attrs_to_add: dict):
     for attr, val in attrs_to_add.items():
         graph.edges[edge][attr] = val
 
-# %% ../nbs/06_transform.ipynb 21
+# %% ../nbs/06_transform.ipynb 22
 _GREEN = '\033[92m'
 _RED = '\033[91m'
 _BLACK = '\033[0m'
@@ -362,8 +399,9 @@ def _log(msg: str, is_log: bool, color: str = _BLACK):
     if is_log:
         print(f"{color}{msg}{_BLACK}")
 
-# %% ../nbs/06_transform.ipynb 22
-def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: dict[NodeName, NodeName], is_log: bool) -> dict[NodeName, NodeName]:
+# %% ../nbs/06_transform.ipynb 23
+def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: dict[NodeName, set[NodeName]],
+                               is_log: bool) -> dict[NodeName, set[NodeName]]:
     """Performs the restrictive phase of the rewriting process on some match: Clone nodes, Remove nodes and edges (and/or their attributes).
 
     Args:
@@ -376,75 +414,126 @@ def _rewrite_match_restrictive(input_graph: DiGraph, rule: Rule, lhs_input_map: 
         dict[NodeName, NodeName]: maps names of P nodes to names of input graph nodes
     """
 
-    # Initialize an empty mapping from P nodes to input_graph nodes.
-    p_input_map = {}
+    # Initialize an empty mapping from P nodes to input_graph nodes
+    # We support set semantics to keep the same format for single nodes and collections
+    p_input_map = defaultdict(set) # dict[NodeName, set[NodeName]]
 
     """Clone nodes:
         Find all LHS nodes that should be cloned (and what are their clones in P).
         For each clone of an LHS node (apart from the first one), add it to the input graph 
         (clone with edges and attributes) and add the pair (clone_name, lhs_node_name) to the p->input mapping.
     """
-    # Map each cloned lhs node to a flag, denoting whether the original node is reused with the same name in P.
-    # If not, the original node will be removed later
+
     cloned_to_flags_map = {cloned_lhs_node: False for cloned_lhs_node in rule.nodes_to_clone().keys()}
     for cloned_lhs_node, p_clones in rule.nodes_to_clone().items():
         for p_clone in p_clones:
-            # Original cloned node is reused in P, preserve it
             if p_clone == cloned_lhs_node:
-                _log(f"Clone {lhs_input_map[cloned_lhs_node]}", is_log)
+                # Handle the case where the node is reused directly from lhs_input_map
+                for node in lhs_input_map[cloned_lhs_node]:
+                    _log(f"Clone {node}", is_log)
+                    p_input_map[p_clone].add(node)
                 cloned_to_flags_map[cloned_lhs_node] = True
-                p_input_map[p_clone] = lhs_input_map[cloned_lhs_node]
-            # All other clones require actual cloning (mapped to the new cloned node in input graph)
             else:
-                new_clone_id = _clone_node(input_graph, lhs_input_map[cloned_lhs_node])
-                _log(f"Clone {lhs_input_map[cloned_lhs_node]} as {new_clone_id}", is_log)
-                p_input_map[p_clone] = new_clone_id
+                # Create new clones
+                for node in lhs_input_map[cloned_lhs_node]:
+                    new_clone_id = _clone_node(input_graph, node)
+                    _log(f"Clone {node} as {new_clone_id}", is_log)
+                    p_input_map[p_clone].add(new_clone_id)
 
-    """Remove nodes, complete p->input mapping with preserved nodes which are not clones:
-        Find all LHS nodes that should be removed. 
-        For each LHS node, if should be removed - remove it from input.
-                            otherwise, if it is not a clone, add to the mapping.
-    """
-    for lhs_node in rule.lhs.nodes():
-        # Cloned lhs nodes which weren't reused and so, should be deleted
-        if lhs_node in rule.nodes_to_remove() or (lhs_node in cloned_to_flags_map.keys() and cloned_to_flags_map[lhs_node] == False):
-            _log(f"Remove node {lhs_input_map[lhs_node]}", is_log)
-            _remove_node(input_graph, lhs_input_map[lhs_node])        
-        # Else, either a saved cloned node (already preserved) or a regular one (should preserve them)
-        elif lhs_node not in cloned_to_flags_map.keys():
-            p_node = list(rule._rev_p_lhs[lhs_node])[0]
-            p_input_map[p_node] = lhs_input_map[lhs_node]
+    # Remove nodes, create p_input_map out of the nodes that are preserved
+    
+    # Make sure there are no single/collection conflicts
+    nodes_to_remove = rule.nodes_to_remove()
+    nodes_to_preserve = rule.nodes_to_preserve()
+    for node_to_remove, node_to_preserve in product(nodes_to_remove, nodes_to_preserve):
+        for input_node_to_remove, input_node_to_preserve in product(lhs_input_map[node_to_remove],lhs_input_map[node_to_preserve]):
+            if input_node_to_remove == input_node_to_preserve:
+                raise GraphRewriteException(_exception_msgs["node_removal_conflict"](node_to_remove, node_to_preserve, input_node_to_preserve))
 
-    # Remove edges.
-    for lhs_src, lhs_target in rule.edges_to_remove():
-        _log(f"Remove edge ({p_input_map[lhs_src]}, {p_input_map[lhs_target]})", is_log)
-        _remove_edge(input_graph, (p_input_map[lhs_src], p_input_map[lhs_target]))
+    for node_name in rule.lhs.nodes():
+        if node_name in nodes_to_remove or (node_name in cloned_to_flags_map and not cloned_to_flags_map[node_name]):
+            # Remove the corresponding node(s) in the input graph
+            for input_node in lhs_input_map[node_name]:
+                _log(f"Remove node {input_node}", is_log)
+                _remove_node(input_graph, input_node)
+        else:
+            # Add the corresponding node(s) in the input graph to the p_input_map
+            for input_node in lhs_input_map[node_name]:
+                p_node = list(rule._rev_p_lhs[node_name])[0]
+                p_input_map[p_node].add(input_node)
+    
+    # Remove edges
+    # Make sure there are no single/collection conflicts
+    edges_to_remove = rule.edges_to_remove()
+    edges_to_preserve = rule.edges_to_preserve()
+    input_edges_to_preserve = {(input_src, input_dst):(src, dst) for src, dst in edges_to_preserve for input_src, input_dst in product(lhs_input_map[src], lhs_input_map[dst])}
+               
+    for src_name, dst_name in edges_to_remove:
+        for src_node, dst_node in product(lhs_input_map[src_name], lhs_input_map[dst_name]):
+            # Since we support the collections feature, the mapping has all possible assignements for each node, and so we need to ensure that this edge actually exists
+            if (src_node, dst_node) in input_edges_to_preserve.keys():
+                raise GraphRewriteException(_exception_msgs["edge_removal_conflict"](src_name, dst_name, input_edges_to_preserve[(src_node, dst_node)][0], input_edges_to_preserve[(src_node, dst_node)][1], 
+                                                                                    src_node, dst_node))
+            _log(f"Remove edge {src_node, dst_node}", is_log)
+            _remove_edge(input_graph, (src_node, dst_node))
 
-    # Remove node attrs.
-    for p_node, attrs_to_remove in rule.node_attrs_to_remove().items():
-        _log(f"Remove attrs {attrs_to_remove} from node {p_input_map[p_node]}", is_log)
-        _remove_node_attrs(input_graph, p_input_map[p_node], attrs_to_remove)
-
-    # Remove edge attrs.
-    for (p_src, p_target), attrs_to_remove in rule.edge_attrs_to_remove().items():
-        _log(f"Remove attrs {attrs_to_remove} from edge {(p_input_map[p_src], p_input_map[p_target])}", is_log)
-        _remove_edge_attrs(input_graph, (p_input_map[p_src], p_input_map[p_target]), attrs_to_remove)
-
+    # Remove node attributes    
+        
+    # Get input nodes first to avoid double removals of attributes
+    input_node_attrs_to_remove = defaultdict(set)
+    input_nodes_to_nodes = {}
+    for node, attrs in rule.node_attrs_to_remove().items():
+        for input_node in lhs_input_map[node]:
+            input_node_attrs_to_remove[input_node].update(attrs)
+            input_nodes_to_nodes[input_node] = node
+    
+    # Check for conflicts with attributes that should be preserved   
+    for node, attrs in rule.node_attrs_to_preserve().items():
+        for input_node in lhs_input_map[node]:
+            if input_node in input_node_attrs_to_remove and attrs & input_node_attrs_to_remove[input_node]:
+                raise GraphRewriteException(_exception_msgs["node_attrs_removal_conflict"](input_nodes_to_nodes[input_node], node, input_node, attrs & input_node_attrs_to_remove[input_node]))
+            
+    for input_node, attrs_to_remove in input_node_attrs_to_remove.items():
+        _log(f"Remove attrs {attrs_to_remove} from node {input_node}", is_log)
+        _remove_node_attrs(input_graph, input_node, attrs_to_remove)               
+    
+    # Remove edge attributes
+    # Get input edges first to avoid double removals of attributes
+    input_edges_attrs_to_remove = defaultdict(set)
+    input_edges_to_edges = {}
+    for edge_name, attrs in rule.edge_attrs_to_remove().items():
+        # Iterate over all input edges using the Cartesian product of input nodes for src and dst
+        for input_edge in product(lhs_input_map[edge_name[0]], lhs_input_map[edge_name[1]]):
+            input_edges_attrs_to_remove[input_edge].update(attrs)
+            input_edges_to_edges[input_edge] = edge_name
+    
+    # Check for conflicts with attributes that should be preserved 
+    for edge_name, attrs in rule.edge_attrs_to_preserve().items():
+        # Iterate over all input edges using the Cartesian product of input nodes for src and dst
+        for input_edge in product(lhs_input_map[edge_name[0]], lhs_input_map[edge_name[1]]):
+            if input_edge in input_edges_attrs_to_remove and attrs & input_edges_attrs_to_remove[input_edge]:
+                raise GraphRewriteException(_exception_msgs["edge_attrs_removal_conflict"](input_edges_to_edges[input_edge], edge_name, input_edge, attrs & input_edges_attrs_to_remove[input_edge]))
+    
+    for input_edge, attrs_to_remove in input_edges_attrs_to_remove.items():        
+        _log(f"Remove attrs {attrs_to_remove} from edge {input_edge[0], input_edge[1]}", is_log)
+        _remove_edge_attrs(input_graph, (input_edge[0], input_edge[1]), attrs_to_remove)
+  
     return p_input_map
 
-# %% ../nbs/06_transform.ipynb 23
-def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict[NodeName, NodeName], is_log: bool):
+# %% ../nbs/06_transform.ipynb 24
+def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict[NodeName, set[NodeName]], is_log: bool):
     """Performs the expansive phase of the rewriting process on some match: Merge nodes, Remove Add and edges (and/or new or updated attributes).
 
     Args:
         input_graph (DiGraph): A graph to rewrite
         rule (Rule): A rule that dictates what transformations should the graph go through
-        p_input_map (dict[NodeName, NodeName]): Maps names of P nodes to names of input graph nodes, based on the match which we rewrite
+        p_input_map (dict[NodeName, set[NodeName]]): Maps names of P nodes to names of input graph nodes, based on the match which we rewrite
         is_log (bool): If True, logs are printed throughout the process.
     """
         
     # Initialize an empty mapping from RHS nodes to input_graph nodes.
-    rhs_input_map = {}
+    # We support set semantics to keep the same format for single nodes and collections
+    rhs_input_map = defaultdict(set) # dict[NodeName, set[NodeName]]
 
     """Merge nodes:
         Find all RHS nodes that are a merge of P nodes (and what P nodes they merge).
@@ -454,13 +543,16 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
     """
     merge_rhs_nodes = rule.nodes_to_merge().keys()
     for merge_rhs_node, p_merged in rule.nodes_to_merge().items():
-        input_nodes_to_merge = {p_input_map[p_node] for p_node in p_merged}
+        input_nodes_to_merge = set()
+        for p_node in p_merged:
+            for node in p_input_map[p_node]:
+                input_nodes_to_merge.add(node)
         new_merged_id = _merge_nodes(input_graph, input_nodes_to_merge, rule.merge_policy)
         _log(f"Merge {input_nodes_to_merge} as {new_merged_id}", is_log)
-        rhs_input_map[merge_rhs_node] = new_merged_id
+        rhs_input_map[merge_rhs_node].add(new_merged_id)
         
     """Add nodes, complete RHS->input mapping with added (and preserved) nodes:
-        Find all RHS nodes that should be added to the input (not including nodes that are a merge of P noeds).
+        Find all RHS nodes that should be added to the input (not including nodes that are a merge of P nodes).
         For each RHS node, if should be added - add it to input and to the RHS->input mapping.
                             otherwise, if is not a merge - add to the mapping.
     """
@@ -468,27 +560,63 @@ def _rewrite_match_expansive(input_graph: DiGraph, rule: Rule, p_input_map: dict
         if rhs_node in rule.nodes_to_add():
             added_id = _add_node(input_graph, rhs_node)
             _log(f"Add node {rhs_node} as {added_id}", is_log)
-            rhs_input_map[rhs_node] = added_id
+            rhs_input_map[rhs_node].add(added_id)
         elif rhs_node not in merge_rhs_nodes:
             p_node = list(rule._rev_p_rhs[rhs_node])[0]
-            rhs_input_map[rhs_node] = p_input_map[p_node]
+            for input_node in p_input_map[p_node]:
+                rhs_input_map[rhs_node].add(input_node)
 
     # Add edges.
-    for rhs_src, rhs_target in rule.edges_to_add():
-        _log(f"Add edge ({rhs_input_map[rhs_src]}, {rhs_input_map[rhs_target]})", is_log)
-        _add_edge(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]))
+    for src_name, dst_name in rule.edges_to_add():
+        for src_node, dst_node in product(rhs_input_map[src_name], rhs_input_map[dst_name]):
+            _log(f"Add edge {src_node, dst_node}", is_log)
+            _add_edge(input_graph, (src_node, dst_node))
 
-    # Add node attrs.
-    for rhs_node, attrs_to_add in rule.node_attrs_to_add().items():
-        _log(f"Added attrs {attrs_to_add} to node {rhs_input_map[rhs_node]}", is_log)
-        _add_node_attrs(input_graph, rhs_input_map[rhs_node], attrs_to_add)
+    # Add node attrs.   
+    # Get input nodes first to avoid double removals of attributes and check for conflicts
+    input_node_attrs_to_add = defaultdict(dict)
+    input_node_to_rhs_node = {}
+    for rhs_node, attrs in rule.node_attrs_to_add().items():
+        for input_node in rhs_input_map[rhs_node]:
+            for attr, val in attrs.items():
+                if attr in input_node_attrs_to_add[input_node]:
+                    original_val = input_node_attrs_to_add[input_node][attr]
+                    original_rhs_node = input_node_to_rhs_node[input_node]
+                    if original_val != val:
+                        raise GraphRewriteException(_exception_msgs["node_attrs_addition_conflict"](original_rhs_node, rhs_node, input_node, attr))
+                else:
+                    input_node_attrs_to_add[input_node][attr] = val
+                    input_node_to_rhs_node[input_node] = rhs_node
+           
+    for input_node, attrs_to_add in input_node_attrs_to_add.items(): 
+        _log(f"Added attrs {attrs_to_add} to node {input_node}", is_log)
+        _add_node_attrs(input_graph, input_node, attrs_to_add)
 
     # Add edge attrs.
-    for (rhs_src, rhs_target), attrs_to_add in rule.edge_attrs_to_add().items():
-        _log(f"Added attrs {attrs_to_add} to edge {(rhs_input_map[rhs_src], rhs_input_map[rhs_target])}", is_log)
-        _add_edge_attrs(input_graph, (rhs_input_map[rhs_src], rhs_input_map[rhs_target]), attrs_to_add)
+    
+    input_edge_attrs_to_add = defaultdict(dict)
+    input_edge_to_rhs_edge = {}
 
-# %% ../nbs/06_transform.ipynb 25
+    for rhs_edge, attrs in rule.edge_attrs_to_add().items():
+        for input_edge in product(rhs_input_map[rhs_edge[0]], rhs_input_map[rhs_edge[1]]):
+            for attr, val in attrs.items():
+                if attr in input_edge_attrs_to_add[input_edge]:
+                    original_val = input_edge_attrs_to_add[input_edge][attr]
+                    original_rhs_edge = input_edge_to_rhs_edge[input_edge]
+                    if original_val != val:
+                        # Raise exception if conflicting attribute values for the same edge
+                        raise GraphRewriteException(_exception_msgs["edge_attrs_addition_conflict"](original_rhs_edge, rhs_edge, input_edge, attr))
+                else:
+                    # Add the attribute and track the original rhs_edge
+                    input_edge_attrs_to_add[input_edge][attr] = val
+                    input_edge_to_rhs_edge[input_edge] = rhs_edge
+
+    # After resolving attributes, log and apply them to the graph
+    for input_edge, attrs_to_add in input_edge_attrs_to_add.items():
+        _log(f"Added attrs {attrs_to_add} to edge {input_edge}", is_log)
+        _add_edge_attrs(input_graph, input_edge, attrs_to_add)
+
+# %% ../nbs/06_transform.ipynb 26
 def _copy_graph(graph: DiGraph) -> DiGraph:
     """Creates a copy of the graph (including attributes, which are deep-copied).
 
@@ -504,7 +632,7 @@ def _copy_graph(graph: DiGraph) -> DiGraph:
     copy_graph.update(nodes=copied_nodes, edges=copied_edges)
     return copy_graph
 
-# %% ../nbs/06_transform.ipynb 26
+# %% ../nbs/06_transform.ipynb 27
 def _restore_graph(graph: DiGraph, last_copy_graph: DiGraph):
     """Change a graph according to some "checkpoint".
 
@@ -516,7 +644,7 @@ def _restore_graph(graph: DiGraph, last_copy_graph: DiGraph):
     graph.update(nodes=last_copy_graph.nodes(data=True),
                  edges=last_copy_graph.edges(data=True))
 
-# %% ../nbs/06_transform.ipynb 28
+# %% ../nbs/06_transform.ipynb 29
 def _rewrite_match(input_graph: DiGraph, match: Match,
                    lhs_graph: DiGraph, p_graph: DiGraph, rhs: str,
                    render_rhs: dict[str, RenderFunc],
@@ -551,6 +679,7 @@ def _rewrite_match(input_graph: DiGraph, match: Match,
         rule = Rule(lhs_graph, p_graph, rhs_graph, merge_policy=merge_policy)
         # Transform the graph
         lhs_input_map = match.mapping
+
         p_input_map = _rewrite_match_restrictive(input_graph, rule, lhs_input_map, is_log)
         _rewrite_match_expansive(input_graph, rule, p_input_map, is_log)
         _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
@@ -561,7 +690,7 @@ def _rewrite_match(input_graph: DiGraph, match: Match,
         _restore_graph(input_graph, saved_graph)
         raise e
 
-# %% ../nbs/06_transform.ipynb 30
+# %% ../nbs/06_transform.ipynb 31
 def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
                    condition: FilterFunc = None,
                    render_rhs: dict[str, RenderFunc] = None,
@@ -595,17 +724,19 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
     _log(f"Nodes: {input_graph.nodes(data=True)}\nEdges: {input_graph.edges(data=True)}\n", is_log, _GREEN)
 
     # Parse LHS and P (global for all matches)
-    lhs_graph, condition = lhs_to_graph(lhs, condition)
+    lhs_single_nodes_graph, lhs_collections_graph = lhs_to_graph(lhs)
+    lhs_graph = _create_lhs_graph(lhs_single_nodes_graph, lhs_collections_graph)
     p_graph = p_to_graph(p) if p else None
     
     if is_recursive:
         while True:
             try:
-                next_match = next(find_matches(input_graph, lhs_graph, condition=condition))
+                next_match = next(find_matches(input_graph, lhs_single_nodes_graph, lhs_collections_graph, condition, warn_on_collisions=is_log))
                 if display_matches:
                     draw_match(input_graph, next_match)
                 yield next_match
                 new_res = _rewrite_match(input_graph, next_match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
+
             except StopIteration:
                 break
 
@@ -616,7 +747,7 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
         copy_input_graph = _copy_graph(input_graph)
 
         # Find matches lazily and transform
-        for match in find_matches(copy_input_graph, lhs_graph, condition=condition):
+        for match in find_matches(copy_input_graph, lhs_single_nodes_graph, lhs_collections_graph, condition, warn_on_collisions=is_log):
             if display_matches:
                 draw_match(input_graph, match)
             # the match object points to the copy graph, so we need to move it to the original graph for imperative changes
@@ -625,7 +756,7 @@ def rewrite_iter(input_graph: DiGraph, lhs: str, p: str = None, rhs: str = None,
             new_res = _rewrite_match(input_graph, match, lhs_graph, p_graph, rhs, render_rhs, merge_policy, is_log)
 
 
-# %% ../nbs/06_transform.ipynb 31
+# %% ../nbs/06_transform.ipynb 32
 @delegates(rewrite_iter)
 def rewrite(input_graph: DiGraph, lhs: str,**kwargs
                    ) -> List[Match]:
