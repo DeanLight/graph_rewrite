@@ -198,7 +198,7 @@ def _filter_duplicated_matches(matches: list[Match]) -> Iterator[Match]:
             mappings.append(match.mapping)
             yield match
 
-# %% ../nbs/03_matcher.ipynb 19
+# %% ../nbs/03_matcher.ipynb 20
 def _find_intersecting_pattern_nodes(single_nodes_pattern: DiGraph, collection_pattern: DiGraph) -> list:
     """
     Find the intersecting pattern nodes between the single nodes match pattern and the collection pattern.
@@ -220,7 +220,7 @@ def _find_intersecting_pattern_nodes(single_nodes_pattern: DiGraph, collection_p
     
     return list(single_nodes_pattern_nodes.intersection(collection_pattern_nodes))
 
-# %% ../nbs/03_matcher.ipynb 20
+# %% ../nbs/03_matcher.ipynb 22
 def _find_matches_with_collections(input_graph: DiGraph, single_match_pattern: DiGraph ,collection_pattern: DiGraph, 
                                       single_nodes_matches: List[Dict[NodeName, Set[NodeName]]], intersecting_pattern_nodes: List[NodeName],
                                       condition: FilterFunc = lambda match : True, filter: bool = True, warn_on_collisions: bool = True
@@ -266,7 +266,7 @@ def _find_matches_with_collections(input_graph: DiGraph, single_match_pattern: D
     matches = [mapping_to_match(input_graph, single_match_pattern, collection_pattern, mapping, warn_on_collisions) for mapping in single_nodes_matches]
     return list(_filter_duplicated_matches(matches))
 
-# %% ../nbs/03_matcher.ipynb 22
+# %% ../nbs/03_matcher.ipynb 24
 def find_matches(input_graph: DiGraph, single_match_pattern: DiGraph, collections_pattern: DiGraph = None, 
                  condition: FilterFunc = lambda match : True, filter: bool = True, warn_on_collisions: bool = True
                  ) -> Iterator[Match]:
@@ -312,11 +312,6 @@ def find_matches(input_graph: DiGraph, single_match_pattern: DiGraph, collection
     else:
         # If a collections pattern is None, the matches are the same as the filtered single node matches
         filtered_matches = [match for _, match in filtered_single_node_mapping_with_matches]
-
-    # Moved it to both single and collection matches to reduce steps
-    # matches = [(mapping_to_match(input_graph, single_match_pattern, collections_pattern, mapping, warn_on_collisions))
-    #     for mapping in mappings]        
-    # filtered_matches = [match for match in matches if condition(match)]
 
     # remove anonymous nodes and edges - I had to split this from the previous loop because it was causing a bug (it inserted none matches)
     for match in filtered_matches:

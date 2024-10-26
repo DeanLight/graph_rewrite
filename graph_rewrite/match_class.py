@@ -176,12 +176,13 @@ class Match:
         pattern nodes. If there are, print a warning specifying the input nodes that are being mapped to multiple
         pattern nodes.
         """
-        input_to_pattern_nodes = defaultdict(set)
-        for pattern_node in self._nodes:
-            for input_node in self.mapping[pattern_node]:
-                input_to_pattern_nodes[input_node].add(pattern_node)
-                if len(input_to_pattern_nodes[input_node]) > 1:
-                    logger.warning(f"Input node {input_node} is mapped to multiple pattern nodes: {input_to_pattern_nodes[input_node]}") 
+        input_to_pattern_nodes = defaultdict(int)
+        for input_node in self.graph.nodes:
+            for pattern_node in self.mapping:
+                if input_node in self.mapping[pattern_node]:
+                    input_to_pattern_nodes[input_node] += 1
+            if input_to_pattern_nodes[input_node] > 1:
+                logger.warning(f"Input node {input_node} is mapped to multiple pattern nodes: {self.mapping[input_node]}") 
         return 
                 
     def _check_node_in_pattern(self, pattern_node: NodeName):

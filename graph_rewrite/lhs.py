@@ -12,9 +12,7 @@ from lark import UnexpectedCharacters, UnexpectedToken
 from .match_class import Match
 from .core import GraphRewriteException
 from .core import _create_graph,  _graphs_equal, draw
-from collections import defaultdict
-from .match_class import _convert_to_edge_name
-from typing import Tuple, Union
+from typing import Tuple
 
 # %% ../nbs/01_lhs_parsing.ipynb 9
 lhs_parser = Lark(r"""
