@@ -33,9 +33,9 @@ _exception_msgs = {
     "node_attrs_removal_conflict": lambda removed_node, preserved_node, input_node, attrs: \
         f"Attributes {attrs} in input node {input_node} should be removed by pattern node {removed_node}, which conflicts with preserved pattern node {preserved_node}'s attributes",
     "edge_attrs_removal_conflict": lambda removed_edge, preserved_edge, input_edge, attrs: \
-         f"Attributes {attrs} in input node {input_edge} should be removed by pattern edge {preserved_edge}, which conflicts with preserved pattern edge {removed_edge}'s attributes",
-    "node_attrs_addition_conflict": lambda first_rhs_node, second_rhs_node, input_node, attr: f"Attribute {attr} in input_node {input_node} value conflicts between pattern nodes {first_rhs_node} and {second_rhs_node}",
-    "edge_attrs_addition_conflict": lambda first_rhs_edge, second_rhs_edge, input_edge, attr: f"Attribute {attr} in input_node {input_edge} value conflicts between pattern nodes {first_rhs_edge} and {second_rhs_edge}"
+         f"Attributes {attrs} in input edge {input_edge} should be removed by pattern edge {preserved_edge}, which conflicts with preserved pattern edge {removed_edge}'s attributes",
+    "node_attrs_addition_conflict": lambda first_rhs_node, second_rhs_node, input_node, attr: f"Attribute {attr} in input node {input_node} value conflicts between pattern nodes {first_rhs_node} and {second_rhs_node}",
+    "edge_attrs_addition_conflict": lambda first_rhs_edge, second_rhs_edge, input_edge, attr: f"Attribute {attr} in input edge {input_edge} value conflicts between pattern edges {first_rhs_edge} and {second_rhs_edge}"
 }
 
 # %% ../nbs/06_transform.ipynb 8
