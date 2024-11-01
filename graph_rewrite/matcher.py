@@ -24,8 +24,8 @@ def _attributes_match(pattern_attrs: dict, input_attrs: dict) -> bool:
     - Constant value checks (ensures that constant values match).
 
     Args:
-        pattern_attrs (dict): The pattern attributes.
-        input_attrs (dict): The input attributes.
+        pattern_attrs (dict: attr_name -> (attr_type, attr_value)): The pattern attributes.
+        input_attrs (dict: attr_name -> (attr_type, attr_value)): The input attributes.
 
     Returns:
         bool: True if the input attributes match the pattern attributes, False otherwise.

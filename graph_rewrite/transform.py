@@ -27,9 +27,9 @@ _exception_msgs = {
     "no_such_attr_in_edge": lambda attr, edge: f"Attribute {attr} does not exist in input graph's edge {edge}.",
     "edge_exists": lambda edge: f"Edge {edge} already exists in the input graph.",
     "not_enough_to_merge": lambda: f"Tried to merge less than one nodes.",
-    "node_removal_conflict": lambda removed_node, preserved_node, input_node: f"Input node {input_node} was removed by pattern node {removed_node}, which conflicts with preserved pattern node {preserved_node}",
+    "node_removal_conflict": lambda removed_node, preserved_node, input_node: f"Input node {input_node} should be removed by pattern node {removed_node}, which conflicts with preserved pattern node {preserved_node}",
     "edge_removal_conflict": lambda removed_edge_src, removed_edge_dst, preserved_edge_src, preserved_edge_dst, input_src, input_dst: \
-        f"Input edge ({input_src}, {input_dst}) was removed by pattern edge ({removed_edge_src}, {removed_edge_dst}), which conflicts with preserved pattern edge ({preserved_edge_src}, {preserved_edge_dst})",
+        f"Input edge ({input_src}, {input_dst}) should be removed by pattern edge ({removed_edge_src}, {removed_edge_dst}), which conflicts with preserved pattern edge ({preserved_edge_src}, {preserved_edge_dst})",
     "node_attrs_removal_conflict": lambda removed_node, preserved_node, input_node, attrs: \
         f"Attributes {attrs} in input node {input_node} should be removed by pattern node {removed_node}, which conflicts with preserved pattern node {preserved_node}'s attributes",
     "edge_attrs_removal_conflict": lambda removed_edge, preserved_edge, input_edge, attrs: \

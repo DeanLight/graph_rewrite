@@ -43,17 +43,6 @@ docker-compose run main bash
 
 ## Getting started
 
-### Requirements
-
-To use **Graph Rewrite**, you’ll need to have `networkx` installed, as
-the input graph should be in a `networkx.DiGraph` format. Make sure to
-include the following imports at the start of your script or notebook:
-
-``` python
-import networkx as nx
-from graph_rewrite.transform import rewrite
-```
-
 ### The Rewrite Function
 
 The library interface is built around a single main function,
@@ -143,7 +132,7 @@ We use the following strings: \* **LHS**: The string `lhs = 'x->y->z'`
 specifies that we’re looking for a path where node `x` connects to node
 `y`, which in turn connects to node `z`. Here, `x`, `y`, and `z` are
 symbolic names for the matching nodes in the input graph. \* **P**: The
-string `p = 'x->z'` specifies that we want to preserve the direct path
+string `p = 'x,z'` specifies that we want to preserve the direct path
 from `x` to `z`, which will be created during the rewrite. This also
 implies that `y` is removed from the graph during the rewrite since it’s
 not part of `P`. \* **RHS**: The string `rhs = 'x->z'` specifies that we

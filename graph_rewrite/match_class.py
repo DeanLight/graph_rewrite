@@ -12,10 +12,10 @@ from itertools import product
 from collections import defaultdict
 import logging
 
-# %% ../nbs/02_match_class.ipynb 7
+# %% ../nbs/02_match_class.ipynb 6
 logger = logging.getLogger(__name__)    
 
-# %% ../nbs/02_match_class.ipynb 14
+# %% ../nbs/02_match_class.ipynb 13
 def _convert_to_edge_name(src: NodeName, dest: NodeName) -> str:
     """Given a pair of node names, source and destination, return the name of the edge
     connecting the two in the format {src}->{dest}, which is the same format the parser
@@ -30,7 +30,7 @@ def _convert_to_edge_name(src: NodeName, dest: NodeName) -> str:
     """
     return f"{src}->{dest}"
 
-# %% ../nbs/02_match_class.ipynb 16
+# %% ../nbs/02_match_class.ipynb 15
 def is_anonymous_node(node_name: NodeName) -> bool:
     """Given a name of a node in the pattern graph, return true if it begins with '$',
     which is the notion the parser uses to denote anonymous nodes.
@@ -43,7 +43,7 @@ def is_anonymous_node(node_name: NodeName) -> bool:
     """
     return len(node_name) >= 1 and node_name.startswith('_anonymous_node_')
 
-# %% ../nbs/02_match_class.ipynb 18
+# %% ../nbs/02_match_class.ipynb 17
 class NodeCollectionView:
     """
     This class acts as a wrapper for a set of node names, allowing to get information about the nodes
@@ -70,11 +70,7 @@ class NodeCollectionView:
             List: A list of the requested attribute from each node in the set.
 
         """
-        result = []
-        for node in self.input_nodes:
-            if attribute in node:
-                result.append(node[attribute])
-        return result
+        return [node[attribute] for node in self.input_nodes if attribute in node]
 
     def __str__(self):
         """
@@ -118,11 +114,7 @@ class EdgeCollectionView:
         Returns:
             List: A list of the requested attribute from each edge in the set.
         """
-        result = []
-        for edge in self.input_edges:
-            if attribute in edge:
-                result.append(edge[attribute])
-        return result
+        return [edge[attribute] for edge in self.input_edges if attribute in edge]
 
     def __str__(self):
         """
@@ -141,7 +133,7 @@ class EdgeCollectionView:
         """
         return list(self.input_edges)
 
-# %% ../nbs/02_match_class.ipynb 21
+# %% ../nbs/02_match_class.ipynb 20
 class Match:
     """
     Represents a single match of a pattern inside an input graph.
@@ -333,7 +325,7 @@ class Match:
         """Return the pattern edges."""
         return self._edges
 
-# %% ../nbs/02_match_class.ipynb 23
+# %% ../nbs/02_match_class.ipynb 22
 def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_pattern: DiGraph, 
                      mapping: Dict[NodeName, Set[NodeName]], warn_on_collisions: bool=True) -> Match:
     """
@@ -359,7 +351,7 @@ def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_
 
     return Match(input_graph, pattern_nodes, single_nodes, pattern_edges, mapping, warn_on_collisions)
 
-# %% ../nbs/02_match_class.ipynb 42
+# %% ../nbs/02_match_class.ipynb 41
 def draw_match(g, m, **kwargs):
     """
     Draw the input graph with the nodes and edges that are part of the match highlighted.
