@@ -109,7 +109,7 @@ class graphRewriteTransformer(Transformer):
             attr_name, type, value = args       
         
         if type is not None and type not in ["int", "str", "bool", "float"]:
-            raise GraphRewriteException(f"Type '{type}' is not one of the types supported by the LHS parser: int, str, bool, float or None. If another type is needed, please use the condition function.")
+            raise GraphRewriteException(f"Type '{type}' in attribute {attr_name} is not one of the types supported by the LHS parser: int, str, bool, float or None. If another type is needed, please use the condition function.")
             
         return (attr_name, type, value)
     
@@ -251,10 +251,18 @@ class graphRewriteTransformer(Transformer):
         G.add_nodes_from([(node, combined_attributes[node]) for node in new_nodes])
         G.add_edges_from([(node1, node2, combined_attributes[node1 + "->" + node2]) for (node1,node2) in new_edges])
         
-        #sent as a module output and replaces condition.
-        constraints = copy.deepcopy(self.constraints)
+        # add attribute values to the graph
+        for graph_obj, attr_constraints in self.constraints.items():
+            for attr_name in attr_constraints.keys():
+                if graph_obj in G.nodes:
+                    G.nodes[graph_obj][attr_name] = attr_constraints[attr_name]
+                else: 
+                    node1, node2 = graph_obj.split("->")
+                    G.edges[node1, node2][attr_name] = attr_constraints[attr_name]
+                    
+        # Set the constraints to be empty for collections
         self.constraints = {}
-        return (G, constraints) 
+        return G
 
     def lhs(self, args):
         return [arg for arg in args if arg is not None]
@@ -281,39 +289,14 @@ def lhs_to_graph(lhs: str, debug: bool = False) -> Tuple[nx.DiGraph, nx.DiGraph]
         patterns_list = transformer.transform(parse_tree)  # List of (graph, constraints)
 
         if len(patterns_list) == 1:
-            single_nodes_graph, single_nodes_constraints = patterns_list[0]
+            single_nodes_graph = patterns_list[0]
             collections_graph = nx.DiGraph()
-            collections_constraints = {}
-        elif len(patterns_list) == 2:
-            single_nodes_graph, single_nodes_constraints = patterns_list[0]
-            collections_graph, collections_constraints = patterns_list[1]
-        else:
-            raise GraphRewriteException("Unexpected number of pattern sets in LHS.")
-
-        _add_constraints_to_graph(single_nodes_graph, single_nodes_constraints)
-        _add_constraints_to_graph(collections_graph, collections_constraints)
+        else: # len(patterns_list) == 2
+            single_nodes_graph = patterns_list[0]
+            collections_graph = patterns_list[1]
 
         return single_nodes_graph, collections_graph
 
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
         raise GraphRewriteException('Unable to convert LHS: {}'.format(e))
-
-
-def _add_constraints_to_graph(graph: nx.DiGraph, constraints: dict):
-    """
-    Adds constraints to a graph, by going over the constraints dict and adding them to the graph, 
-    such that each node or edge has the a dictionary of constraints - attr_name -> (attr_type_str, attr_value).
-
-    Args:
-    - graph: nx.DiGraph - the graph to add constraints to.
-    - constraints: dict - the constraints to add to the graph.
-    """
-
-    for graph_obj, attr_constraints in constraints.items():
-        for attr_name in attr_constraints.keys():
-            if graph_obj in graph.nodes:
-                graph.nodes[graph_obj][attr_name] = attr_constraints[attr_name]
-            else: 
-                node1, node2 = graph_obj.split("->")
-                graph.edges[node1, node2][attr_name] = attr_constraints[attr_name]
 

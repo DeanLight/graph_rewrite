@@ -88,7 +88,7 @@ def rhs_to_graph(rhs: str, match: Match = None, render_funcs: dict[str, RenderFu
     """
     try:
         tree = rhs_parser.parse(rhs)
-        rhs_graph, _ = graphRewriteTransformer(component="RHS", match=match, render_funcs=render_funcs).transform(tree)                
+        rhs_graph = graphRewriteTransformer(component="RHS", match=match, render_funcs=render_funcs).transform(tree)                
         return rhs_graph
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
         raise GraphRewriteException('Unable to convert RHS: {}'.format(e))
@@ -105,7 +105,7 @@ def p_to_graph(p: str):
     """
     try:
         tree = p_parser.parse(p)
-        p_graph, _ = graphRewriteTransformer(component="P").transform(tree)                
+        p_graph = graphRewriteTransformer(component="P").transform(tree)                
         return p_graph
     except (BaseException, UnexpectedCharacters, UnexpectedToken) as e:
         raise GraphRewriteException('Unable to convert P: {}'.format(e))
