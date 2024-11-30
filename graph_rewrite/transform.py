@@ -215,7 +215,8 @@ def _setup_merged_node(graph: DiGraph, nodes_to_merge: set[NodeName], merge_poli
         - A boolean value for whether the new merged node has a self loop (a special case)
         - The attributes of the self loop, in case such edge exists
     """
-    merged_node_name = _generate_new_node_name(graph, "&".join(nodes_to_merge))
+    string_nodes_to_merge = {str(node) for node in nodes_to_merge}
+    merged_node_name = _generate_new_node_name(graph, "&".join(string_nodes_to_merge))
     
     merged_node_attrs = {}
     merged_src_nodes, merged_target_nodes = set(), set()
@@ -287,7 +288,7 @@ def _merge_nodes(graph: DiGraph, nodes_to_merge: set[NodeName], merge_policy: Me
             raise GraphRewriteException(_exception_msgs["no_such_node"](node_to_merge))
 
     merged_node_name, merged_node_attrs, merged_src_nodes, merged_target_nodes, \
-        merged_src_attrs, merged_target_attrs, self_loop, self_loop_attrs = _setup_merged_node(graph, node_to_merge, merge_policy)
+        merged_src_attrs, merged_target_attrs, self_loop, self_loop_attrs = _setup_merged_node(graph, nodes_to_merge, merge_policy)
 
     # Add merged node to graph
     graph.add_node(merged_node_name, **merged_node_attrs)
