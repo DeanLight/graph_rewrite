@@ -297,13 +297,11 @@ def find_matches(input_graph: DiGraph, single_match_pattern: DiGraph, collection
     single_node_mapping_with_matches = [(mapping,(mapping_to_match(input_graph, single_match_pattern, collections_pattern, mapping, warn_on_collisions)))
         for mapping in single_node_mappings]
     
-    # Tuple of (mapping, match) for each single node match that satisfies the condition
-    filtered_single_node_mapping_with_matches = [(mapping,match) for mapping,match in single_node_mapping_with_matches if (filter and condition(match)) or not filter]
-
     # If a collections pattern is not None, enrich single matches by adding matching collections.
     if collections_pattern:
         intersecting_pattern_nodes = _find_intersecting_pattern_nodes(single_match_pattern, collections_pattern)
         # all single node mappings after filtering based on the condition
+        filtered_single_node_mapping_with_matches = [(mapping,match) for mapping,match in single_node_mapping_with_matches]
         filtered_single_node_mappings = [mapping for mapping,_ in filtered_single_node_mapping_with_matches]
         # Add collections to single nodes matches
         filtered_matches = _find_matches_with_collections(input_graph, single_match_pattern, collections_pattern, 
@@ -311,6 +309,7 @@ def find_matches(input_graph: DiGraph, single_match_pattern: DiGraph, collection
                                                                              condition, filter, warn_on_collisions)
     else:
         # If a collections pattern is None, the matches are the same as the filtered single node matches
+        filtered_single_node_mapping_with_matches = [(mapping,match) for mapping,match in single_node_mapping_with_matches if (filter and condition(match)) or not filter]
         filtered_matches = [match for _, match in filtered_single_node_mapping_with_matches]
 
     # remove anonymous nodes and edges - I had to split this from the previous loop because it was causing a bug (it inserted none matches)
