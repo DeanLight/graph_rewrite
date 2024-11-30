@@ -13,7 +13,6 @@ from .match_class import Match
 from .core import GraphRewriteException
 from .core import _create_graph,  _graphs_equal, draw
 from typing import Tuple
-import pytest
 
 # %% ../nbs/01_lhs_parsing.ipynb 9
 lhs_parser = Lark(r"""
