@@ -324,6 +324,33 @@ class Match:
     def get_pattern_edges(self):
         """Return the pattern edges."""
         return self._edges
+    
+    def __setitem__(self, dst: NodeName, attr_dict):
+        """
+        Set an attribute dictionary as the attribute dictionary of a single pattern node.
+
+        Args:
+            dst (NodeName): The pattern node whose mapped input node needs to be updated.
+            attr_dict: dict of type { attr_name : attr_value }
+
+        Raises:
+            GraphRewriteException: If either dst does not exist in the pattern nodes, or is not a single node.
+        """
+        self._check_node_in_pattern(dst)
+
+        if not self.is_single(dst):
+            raise GraphRewriteException(
+                f"Assignment of an attributes dictionary is only allowed between two single nodes. "
+            )
+        
+        input_node = list(self.mapping[dst])[0]
+
+        attrs_to_remove = {k:v for k,v in self.graph.nodes[input_node].items()}
+        for k,_ in attrs_to_remove.items():
+            self.graph.nodes[input_node].pop(k)
+        
+        for k,v in attr_dict.items():
+            self.graph.nodes[input_node][k] = v
 
 # %% ../nbs/02_match_class.ipynb 22
 def mapping_to_match(input_graph: DiGraph, single_pattern: DiGraph, collections_pattern: DiGraph, 
